@@ -66,14 +66,7 @@
     "outputFile": "results.csv",
     "resourceMonitoring": {
       "enabled": true,
-      "sampleInterval": "5s"
-    },
-    "loggingOptions": {
-      "logRequests": true,
-      "logResponses": true,
-      "logRequestBodies": true,
-      "logResponseBodies": true,
-      "logInterval": "10s"
+      "sampleInterval": "PT5S"
     }
   },
 
