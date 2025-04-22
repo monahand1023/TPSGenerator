@@ -24,8 +24,6 @@ My solution here is a robust, flexible, and feature-rich load testing tool for g
     - [Resource Monitoring](#resource-monitoring)
 - [License](#license)
 
-
-
 ## Project Overview
 
 TPS Generator is a Java-based load testing tool designed to generate controlled HTTP traffic with configurable patterns. It allows you to test the performance, reliability, and scalability of your APIs and web services by simulating realistic traffic conditions. The tool provides comprehensive metrics collection, resource monitoring, and detailed reporting capabilities.
@@ -33,6 +31,8 @@ TPS Generator is a Java-based load testing tool designed to generate controlled 
 ## Features
 
 - **Flexible Traffic Patterns**: Configure stable, ramp-up, spike, or custom traffic patterns
+
+
 - **Parameterized Requests**: Create dynamic requests with values from files or random generators
 - **Comprehensive Metrics Collection**: Measure response times, success rates, TPS, and more
 - **Resource Monitoring**: Track CPU, memory, and thread usage during tests
@@ -88,6 +88,8 @@ The tool supports various traffic pattern implementations:
 ### Building the Project
 
 Clone the repository and build the project using Maven:
+
+
 
 ```bash
 git clone https://github.com/monahand1023/tps-generator.git
@@ -418,6 +420,8 @@ Enable resource monitoring to track CPU, memory, and thread usage:
 
 ## Sample Console Output
 
+Below is the output for the above sample configuration file.
+
 ```
 025-04-22 11:49:48 [main] INFO  i.k.t.TPSGeneratorApplication - Verbose logging enabled
 2025-04-22 11:49:48 [main] INFO  i.k.t.TPSGeneratorApplication - Loaded test configuration: Mock API Load Test
@@ -471,3 +475,5 @@ Process finished with exit code 0
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+
