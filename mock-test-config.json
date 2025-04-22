@@ -25,7 +25,7 @@
       "method": "GET",
       "urlTemplate": "http://localhost:8080/resources/${resourceId}",
       "headers": {
-        "Authorization": "Bearer ${authToken}",
+        "Authorization": "Bearer token123",
         "Accept": "application/json"
       }
     },
@@ -36,7 +36,7 @@
       "urlTemplate": "http://localhost:8080/orders",
       "headers": {
         "Content-Type": "application/json",
-        "Authorization": "Bearer ${authToken}"
+        "Authorization": "Bearer token123"
       },
       "bodyTemplate": "{\"productId\":\"${productId}\",\"quantity\":${quantity}}"
     }
@@ -46,10 +46,6 @@
     "resourceId": {
       "type": "random",
       "range": [1, 1000]
-    },
-    "authToken": {
-      "type": "random",
-      "range": ["token1", "token2", "token3", "token4", "token5"]
     },
     "productId": {
       "type": "random",
@@ -70,14 +66,10 @@
     "outputFile": "results.csv",
     "resourceMonitoring": {
       "enabled": true,
-      "sampleInterval": "5s"
+      "sampleInterval": "PT5S"
     },
     "influxDb": {
-      "enabled": false,
-      "url": "http://localhost:8086",
-      "token": "your_influxdb_token",
-      "org": "your_org",
-      "bucket": "tps_metrics"
+      "enabled": false
     }
   },
 
