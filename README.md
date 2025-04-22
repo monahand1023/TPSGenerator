@@ -24,6 +24,8 @@ My solution here is a robust, flexible, and feature-rich load testing tool for g
     - [Resource Monitoring](#resource-monitoring)
 - [License](#license)
 
+
+
 ## Project Overview
 
 TPS Generator is a Java-based load testing tool designed to generate controlled HTTP traffic with configurable patterns. It allows you to test the performance, reliability, and scalability of your APIs and web services by simulating realistic traffic conditions. The tool provides comprehensive metrics collection, resource monitoring, and detailed reporting capabilities.
@@ -412,6 +414,58 @@ Enable resource monitoring to track CPU, memory, and thread usage:
 "enabled": true,
 "sampleInterval": "PT5S"
 }
+```
+
+## Sample Console Output
+
+```
+025-04-22 11:49:48 [main] INFO  i.k.t.TPSGeneratorApplication - Verbose logging enabled
+2025-04-22 11:49:48 [main] INFO  i.k.t.TPSGeneratorApplication - Loaded test configuration: Mock API Load Test
+2025-04-22 11:49:48 [main] INFO  i.k.t.metrics.ResourceMonitor - Initialized resource monitor
+2025-04-22 11:49:48 [main] INFO  i.k.t.metrics.MetricsCollector - Initialized metrics collector
+2025-04-22 11:49:48 [main] INFO  i.k.t.request.RequestGenerator - Initialized parameter source for 'resourceId'
+2025-04-22 11:49:48 [main] INFO  i.k.t.request.RequestGenerator - Initialized parameter source for 'productId'
+2025-04-22 11:49:48 [main] INFO  i.k.t.request.RequestGenerator - Initialized parameter source for 'quantity'
+2025-04-22 11:49:48 [main] INFO  i.k.t.request.RequestGenerator - Initialized request generator with 2 templates and 3 parameter sources
+2025-04-22 11:49:48 [main] INFO  i.k.tpsgenerator.core.CircuitBreaker - Initialized circuit breaker with error threshold 0.3, window size 50
+2025-04-22 11:49:48 [main] INFO  i.k.t.core.ExecutionController - Initialized execution controller with traffic pattern: SpikePattern(baseTps=30.00, spikeTps=100.00, spikeStart=45000 ms, spikeDuration=15000 ms)
+2025-04-22 11:49:48 [main] INFO  i.k.t.TPSGeneratorApplication - Starting test execution...
+2025-04-22 11:49:48 [main] INFO  i.k.t.metrics.ResourceMonitor - Started resource monitoring with sample interval PT5S
+2025-04-22 11:49:48 [main] INFO  i.k.t.metrics.MetricsCollector - Started metrics collection at 1745347788303
+2025-04-22 11:49:48 [pool-2-thread-1] INFO  i.k.t.core.ExecutionController - Progress: 0.0% | Target TPS: 30.00 | Actual TPS: 0.00 | Success Rate: 0.00%
+2025-04-22 11:49:48 [main] INFO  i.k.t.core.ExecutionController - Test started, will run for 120 seconds
+2025-04-22 11:49:58 [pool-2-thread-1] INFO  i.k.t.core.ExecutionController - Progress: 8.3% | Target TPS: 30.00 | Actual TPS: 29.00 | Success Rate: 99.34%
+2025-04-22 11:50:08 [pool-2-thread-1] INFO  i.k.t.core.ExecutionController - Progress: 16.7% | Target TPS: 30.00 | Actual TPS: 30.00 | Success Rate: 99.67%
+2025-04-22 11:50:18 [pool-2-thread-1] INFO  i.k.t.core.ExecutionController - Progress: 25.0% | Target TPS: 30.00 | Actual TPS: 29.00 | Success Rate: 99.67%
+2025-04-22 11:50:28 [pool-2-thread-1] INFO  i.k.t.core.ExecutionController - Progress: 33.3% | Target TPS: 30.00 | Actual TPS: 29.00 | Success Rate: 99.83%
+2025-04-22 11:50:38 [pool-2-thread-1] INFO  i.k.t.core.ExecutionController - Progress: 41.7% | Target TPS: 100.00 | Actual TPS: 100.00 | Success Rate: 99.71%
+2025-04-22 11:50:48 [pool-2-thread-1] INFO  i.k.t.core.ExecutionController - Progress: 50.0% | Target TPS: 30.00 | Actual TPS: 100.00 | Success Rate: 99.71%
+2025-04-22 11:50:58 [pool-2-thread-1] INFO  i.k.t.core.ExecutionController - Progress: 58.3% | Target TPS: 30.00 | Actual TPS: 30.00 | Success Rate: 99.93%
+2025-04-22 11:51:08 [pool-2-thread-1] INFO  i.k.t.core.ExecutionController - Progress: 66.7% | Target TPS: 30.00 | Actual TPS: 30.00 | Success Rate: 99.94%
+2025-04-22 11:51:18 [pool-2-thread-1] INFO  i.k.t.core.ExecutionController - Progress: 75.0% | Target TPS: 30.00 | Actual TPS: 30.00 | Success Rate: 99.95%
+2025-04-22 11:51:28 [pool-2-thread-1] INFO  i.k.t.core.ExecutionController - Progress: 83.3% | Target TPS: 30.00 | Actual TPS: 30.00 | Success Rate: 99.97%
+2025-04-22 11:51:38 [pool-2-thread-1] INFO  i.k.t.core.ExecutionController - Progress: 91.7% | Target TPS: 30.00 | Actual TPS: 29.00 | Success Rate: 99.95%
+2025-04-22 11:51:48 [pool-2-thread-1] INFO  i.k.t.core.ExecutionController - Progress: 100.0% | Target TPS: 30.00 | Actual TPS: 30.00 | Success Rate: 99.98%
+2025-04-22 11:51:48 [main] INFO  i.k.t.core.ExecutionController - Test execution completed, waiting for pending requests to finish
+2025-04-22 11:51:52 [main] INFO  i.k.t.metrics.MetricsCollector - Stopped metrics collection, test duration: 123938 ms
+2025-04-22 11:51:52 [main] INFO  i.k.t.TPSGeneratorApplication - Test completed in 00:02:03
+2025-04-22 11:51:52 [main] INFO  i.k.t.metrics.exporter.CSVExporter - Exporting metrics to /Users/danm/IdeaProjects/TPSGenerator/results/Mock API Load Test_20250422_114948.csv
+2025-04-22 11:51:52 [main] INFO  i.k.t.metrics.exporter.CSVExporter - Metrics exported successfully
+2025-04-22 11:51:52 [main] INFO  i.k.t.TPSGeneratorApplication - Results exported to results/Mock API Load Test_20250422_114948.csv
+
+=== Test Summary ===
+Duration: 00:02:03
+Total Requests: 4685
+Successful Requests: 4685
+Failed Requests: 0
+Success Rate: 100.00%
+Average TPS: 37.80
+P95 Response Time: 101 ms
+Max CPU Usage: 20.61%
+Max Memory Usage: 96.34 MB
+==================
+
+Process finished with exit code 0
 ```
 
 ## License
