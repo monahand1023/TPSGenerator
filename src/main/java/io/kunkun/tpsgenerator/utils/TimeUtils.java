@@ -1,4 +1,4 @@
-package com.example.tpsgenerator.utils;
+package io.kunkun.tpsgenerator.utils;
 
 import java.time.Duration;
 import java.time.Instant;

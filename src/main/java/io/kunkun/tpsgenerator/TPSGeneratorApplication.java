@@ -1,9 +1,9 @@
 package io.kunkun.tpsgenerator;
 
-import com.example.tpsgenerator.config.TestConfig;
-import com.example.tpsgenerator.core.ExecutionController;
-import com.example.tpsgenerator.metrics.MetricsCollector;
-import com.example.tpsgenerator.metrics.exporter.CSVExporter;
+import io.kunkun.tpsgenerator.config.TestConfig;
+import io.kunkun.tpsgenerator.core.ExecutionController;
+import io.kunkun.tpsgenerator.metrics.MetricsCollector;
+import io.kunkun.tpsgenerator.metrics.exporter.CSVExporter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.extern.slf4j.Slf4j;

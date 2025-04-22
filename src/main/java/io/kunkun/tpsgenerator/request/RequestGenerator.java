@@ -1,9 +1,9 @@
 package io.kunkun.tpsgenerator.request;
 
-import com.example.tpsgenerator.config.TestConfig;
-import com.example.tpsgenerator.request.parameter.FileParameterSource;
-import com.example.tpsgenerator.request.parameter.ParameterSource;
-import com.example.tpsgenerator.request.parameter.RandomParameterSource;
+import io.kunkun.tpsgenerator.config.TestConfig;
+import io.kunkun.tpsgenerator.request.parameter.FileParameterSource;
+import io.kunkun.tpsgenerator.request.parameter.ParameterSource;
+import io.kunkun.tpsgenerator.request.parameter.RandomParameterSource;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.http.HttpRequest;

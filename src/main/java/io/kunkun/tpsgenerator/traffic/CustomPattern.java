@@ -1,4 +1,4 @@
-package com.example.tpsgenerator.traffic;
+package io.kunkun.tpsgenerator.traffic;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;

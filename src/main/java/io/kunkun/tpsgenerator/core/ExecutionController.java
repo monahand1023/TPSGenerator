@@ -1,13 +1,13 @@
 package io.kunkun.tpsgenerator.core;
 
-import com.example.tpsgenerator.config.TestConfig;
-import com.example.tpsgenerator.metrics.MetricsCollector;
-import com.example.tpsgenerator.model.TestResult;
-import com.example.tpsgenerator.request.RequestGenerator;
-import com.example.tpsgenerator.traffic.RampUpPattern;
-import com.example.tpsgenerator.traffic.SpikePattern;
-import com.example.tpsgenerator.traffic.StablePattern;
-import com.example.tpsgenerator.traffic.TrafficPattern;
+import io.kunkun.tpsgenerator.config.TestConfig;
+import io.kunkun.tpsgenerator.metrics.MetricsCollector;
+import io.kunkun.tpsgenerator.model.TestResult;
+import io.kunkun.tpsgenerator.request.RequestGenerator;
+import io.kunkun.tpsgenerator.traffic.RampUpPattern;
+import io.kunkun.tpsgenerator.traffic.SpikePattern;
+import io.kunkun.tpsgenerator.traffic.StablePattern;
+import io.kunkun.tpsgenerator.traffic.TrafficPattern;
 import com.google.common.util.concurrent.RateLimiter;
 import lombok.extern.slf4j.Slf4j;
 

@@ -1,7 +1,7 @@
 package io.kunkun.tpsgenerator.core;
 
-import com.example.tpsgenerator.metrics.MetricsCollector;
-import com.example.tpsgenerator.request.RequestGenerator;
+import io.kunkun.tpsgenerator.metrics.MetricsCollector;
+import io.kunkun.tpsgenerator.request.RequestGenerator;
 import com.google.common.util.concurrent.RateLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

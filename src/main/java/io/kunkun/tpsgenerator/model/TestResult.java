@@ -1,6 +1,6 @@
-package com.example.tpsgenerator.model;
+package io.kunkun.tpsgenerator.model;
 
-import com.example.tpsgenerator.metrics.TestMetrics;
+import io.kunkun.tpsgenerator.metrics.TestMetrics;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;

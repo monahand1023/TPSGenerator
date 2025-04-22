@@ -1,6 +1,6 @@
 package io.kunkun.tpsgenerator.metrics;
 
-import com.example.tpsgenerator.model.ResourceSnapshot;
+import io.kunkun.tpsgenerator.model.ResourceSnapshot;
 import lombok.Data;
 import org.HdrHistogram.Histogram;
 

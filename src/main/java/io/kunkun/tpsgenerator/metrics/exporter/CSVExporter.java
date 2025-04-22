@@ -1,7 +1,7 @@
 package io.kunkun.tpsgenerator.metrics.exporter;
 
-import com.example.tpsgenerator.model.ResourceSnapshot;
-import com.example.tpsgenerator.metrics.TestMetrics;
+import io.kunkun.tpsgenerator.model.ResourceSnapshot;
+import io.kunkun.tpsgenerator.metrics.TestMetrics;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;

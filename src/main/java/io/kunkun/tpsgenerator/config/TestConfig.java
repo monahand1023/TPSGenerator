@@ -1,6 +1,6 @@
 package io.kunkun.tpsgenerator.config;
 
-import com.example.tpsgenerator.request.RequestTemplate;
+import io.kunkun.tpsgenerator.request.RequestTemplate;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 

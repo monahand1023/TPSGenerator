@@ -1,8 +1,8 @@
 package io.kunkun.tpsgenerator.metrics.exporter;
 
-import com.example.tpsgenerator.config.TestConfig;
-import com.example.tpsgenerator.metrics.TestMetrics;
-import com.example.tpsgenerator.model.ResourceSnapshot;
+import io.kunkun.tpsgenerator.config.TestConfig;
+import io.kunkun.tpsgenerator.metrics.TestMetrics;
+import io.kunkun.tpsgenerator.model.ResourceSnapshot;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 
