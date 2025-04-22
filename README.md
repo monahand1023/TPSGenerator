@@ -1,16 +1,80 @@
 # TPS Generator
 
-A robust, flexible, and feature-rich load testing tool for generating controlled HTTP traffic patterns.
+When I was working at Amazon, we had a tool called "TPS Generator" that we would use to simulate traffic and generate traffic loads. I know that you can do a very quick solution using a tool like Postman (https://blog.postman.com/postman-api-performance-testing/), but if you need something a bit more customizable and flexible, you may need to build out your own solution.
+My solution here is a robust, flexible, and feature-rich load testing tool for generating controlled HTTP traffic patterns to test API performance and reliability. If you also need to use a quick scaffolding to mock a service, be sure to check out my TPSGenerator-Service to quickly do this: https://github.com/monahand1023/TPSGenerator-Server
+
+## Table of Contents
+
+- [Project Overview](#project-overview)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Getting Started](#getting-started)
+    - [Prerequisites](#prerequisites)
+    - [Building the Project](#building-the-project)
+    - [Configuration](#configuration)
+- [Usage](#usage)
+    - [Basic Usage](#basic-usage)
+    - [Traffic Patterns](#traffic-patterns)
+    - [Request Templates](#request-templates)
+    - [Parameter Sources](#parameter-sources)
+- [Metrics and Reports](#metrics-and-reports)
+- [Advanced Features](#advanced-features)
+    - [Circuit Breaker](#circuit-breaker)
+    - [Dashboard Integration](#dashboard-integration)
+    - [Resource Monitoring](#resource-monitoring)
+- [License](#license)
+
+## Project Overview
+
+TPS Generator is a Java-based load testing tool designed to generate controlled HTTP traffic with configurable patterns. It allows you to test the performance, reliability, and scalability of your APIs and web services by simulating realistic traffic conditions. The tool provides comprehensive metrics collection, resource monitoring, and detailed reporting capabilities.
 
 ## Features
 
-- **Flexible Traffic Patterns**: Stable, Ramp-up, Spike, and Custom patterns
+- **Flexible Traffic Patterns**: Configure stable, ramp-up, spike, or custom traffic patterns
 - **Parameterized Requests**: Create dynamic requests with values from files or random generators
-- **Comprehensive Metrics Collection**: Response times, success rates, TPS, resource usage
-- **Real-time Monitoring**: Track test progress with live metrics
-- **Dashboard Integration**: Visualize results with InfluxDB/Grafana or custom dashboard
+- **Comprehensive Metrics Collection**: Measure response times, success rates, TPS, and more
+- **Resource Monitoring**: Track CPU, memory, and thread usage during tests
+- **Real-time Monitoring**: View test progress and metrics as the test runs
+- **Dashboard Integration**: Visualize results with customizable dashboards
 - **Circuit Breaker Protection**: Automatically stop tests when error rates exceed thresholds
 - **Detailed Reports**: Export results to CSV for analysis
+
+## Architecture
+
+The TPS Generator is built with a modular architecture focusing on separation of concerns:
+
+### Core Components
+
+- **ExecutionController**: Orchestrates the test execution, manages threads, and controls traffic rates
+- **RequestExecutor**: Executes HTTP requests and collects performance metrics
+- **CircuitBreaker**: Monitors success/failure rates and prevents excessive failures
+
+### Traffic Patterns
+
+The tool supports various traffic pattern implementations:
+
+- **StablePattern**: Maintains a constant TPS throughout the test
+- **RampUpPattern**: Linearly increases TPS from a start value to a target value
+- **SpikePattern**: Maintains a base TPS with spikes of higher TPS at specified times
+- **CustomPattern**: Allows defining custom TPS values over time
+
+### Request Management
+
+- **RequestGenerator**: Generates HTTP requests based on templates and parameter sources
+- **RequestTemplate**: Defines the structure of requests with parameter placeholders
+- **Parameter Sources**: Provide values for parameters (file-based, random)
+
+### Metrics and Monitoring
+
+- **MetricsCollector**: Collects and aggregates test metrics
+- **ResourceMonitor**: Monitors system resources (CPU, memory, threads)
+- **ErrorAnalyzer**: Analyzes errors and failures during test execution
+- **ResponseValidator**: Validates HTTP responses against configured criteria
+
+### Reporting
+
+- **CSVExporter**: Exports metrics to CSV files for analysis
+- **DashboardClient**: Sends metrics to a dashboard service for visualization
 
 ## Getting Started
 
@@ -21,13 +85,106 @@ A robust, flexible, and feature-rich load testing tool for generating controlled
 
 ### Building the Project
 
+Clone the repository and build the project using Maven:
+
 ```bash
+git clone https://github.com/monahand1023/tps-generator.git
+cd tps-generator
 mvn clean package
 ```
 
 This will create a runnable JAR file in the `target` directory.
 
-### Running a Test
+### Configuration
+
+TPS Generator uses JSON configuration files to define test parameters. Here's a sample configuration:
+
+```json
+{
+  "name": "Mock API Load Test",
+  "targetServiceUrl": "http://localhost:8080",
+  "testDuration": "PT2M",
+
+  "trafficPattern": {
+    "type": "spike",
+    "targetTps": 30,
+    "spikeTps": 100,
+    "spikeStartTime": "PT45S",
+    "spikeDuration": "PT15S"
+  },
+
+  "threadPool": {
+    "coreSize": 20,
+    "maxSize": 50,
+    "queueSize": 100,
+    "keepAliveTime": "PT60S"
+  },
+
+  "requestTemplates": [
+    {
+      "name": "getResource",
+      "weight": 70,
+      "method": "GET",
+      "urlTemplate": "http://localhost:8080/resources",
+      "headers": {
+        "Authorization": "Bearer token123",
+        "Accept": "application/json"
+      }
+    },
+    {
+      "name": "createResource",
+      "weight": 30,
+      "method": "POST",
+      "urlTemplate": "http://localhost:8080/orders",
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer token123"
+      },
+      "bodyTemplate": "{\"productId\":\"${productId}\",\"quantity\":${quantity}}"
+    }
+  ],
+
+  "parameterSources": {
+    "resourceId": {
+      "type": "random",
+      "range": [1, 1000]
+    },
+    "productId": {
+      "type": "random",
+      "range": [100, 999]
+    },
+    "quantity": {
+      "type": "random",
+      "distribution": "normal",
+      "mean": 3,
+      "stddev": 1,
+      "min": 1,
+      "max": 10
+    }
+  },
+
+  "metrics": {
+    "responseTimePercentiles": [50, 90, 95, 99],
+    "outputFile": "results.csv",
+    "resourceMonitoring": {
+      "enabled": true,
+      "sampleInterval": "PT5S"
+    }
+  },
+
+  "circuitBreaker": {
+    "enabled": true,
+    "errorThreshold": 0.3,
+    "windowSize": 50
+  }
+}
+```
+
+## Usage
+
+### Basic Usage
+
+Run a test using the following command:
 
 ```bash
 java -jar target/tps-generator-1.0.0.jar path/to/test-config.json [output-directory]
@@ -37,48 +194,19 @@ Where:
 - `test-config.json` is your test configuration file
 - `output-directory` (optional) is where results will be stored (default: `results`)
 
-## Configuration
+For verbose logging, add the `--verbose` flag:
 
-TPS Generator uses JSON configuration files to define test parameters. Here's a sample configuration:
-
-```json
-{
-  "name": "API Load Test",
-  "targetServiceUrl": "http://api.example.com",
-  "testDuration": "10m",
-  
-  "trafficPattern": {
-    "type": "rampUp",
-    "startTps": 10,
-    "targetTps": 100,
-    "rampDuration": "2m"
-  },
-  
-  "requestTemplates": [
-    {
-      "name": "getUser",
-      "weight": 70,
-      "method": "GET",
-      "urlTemplate": "http://api.example.com/users/${userId}"
-    }
-  ],
-  
-  "parameterSources": {
-    "userId": {
-      "type": "random",
-      "range": [1000, 9999]
-    }
-  }
-}
+```bash
+java -jar target/tps-generator-1.0.0.jar path/to/test-config.json results --verbose
 ```
 
-See `test-config.json` for a complete example with all available options.
+### Traffic Patterns
 
-## Traffic Patterns
+The tool supports several traffic patterns:
 
-### Stable Pattern
+#### Stable Pattern
 
-Maintains a constant TPS rate throughout the test.
+Maintains a constant TPS rate throughout the test:
 
 ```json
 "trafficPattern": {
@@ -87,38 +215,77 @@ Maintains a constant TPS rate throughout the test.
 }
 ```
 
-### Ramp-up Pattern
+#### Ramp-up Pattern
 
-Linearly increases TPS from a start value to a target value over time.
+Linearly increases TPS from a start value to a target value:
 
 ```json
 "trafficPattern": {
   "type": "rampUp",
   "startTps": 10,
   "targetTps": 100,
-  "rampDuration": "2m"
+  "rampDuration": "PT2M"
 }
 ```
 
-### Spike Pattern
+#### Spike Pattern
 
-Maintains a base TPS with spikes of higher TPS at specific times.
+Maintains a base TPS with spikes of higher TPS at specific times:
 
 ```json
 "trafficPattern": {
   "type": "spike",
   "targetTps": 50,
   "spikeTps": 200,
-  "spikeStartTime": "5m",
-  "spikeDuration": "30s"
+  "spikeStartTime": "PT5M",
+  "spikeDuration": "PT30S"
 }
 ```
 
-## Parameter Sources
+#### Custom Pattern
 
-### Random Parameters
+Loads TPS values from a CSV file:
 
-Generate random values within specified ranges:
+```json
+"trafficPattern": {
+  "type": "custom",
+  "patternFile": "patterns/custom-pattern.csv"
+}
+```
+
+### Request Templates
+
+Request templates define the structure of HTTP requests with parameter placeholders:
+
+```json
+"requestTemplates": [
+  {
+    "name": "getResource",
+    "weight": 70,
+    "method": "GET",
+    "urlTemplate": "${targetServiceUrl}/api/resources/${resourceId}",
+    "headers": {
+      "Authorization": "Bearer ${authToken}",
+      "Accept": "application/json"
+    }
+  }
+]
+```
+
+- `name`: A descriptive name for the template
+- `weight`: The relative frequency of this template when selecting randomly
+- `method`: The HTTP method (GET, POST, PUT, DELETE)
+- `urlTemplate`: The URL with optional parameter placeholders
+- `headers`: HTTP headers with optional parameter placeholders
+- `bodyTemplate`: Request body template with parameter placeholders (for POST/PUT)
+
+### Parameter Sources
+
+Parameter sources provide values for request templates:
+
+#### Random Parameters
+
+Generate random integer values:
 
 ```json
 "userId": {
@@ -127,7 +294,7 @@ Generate random values within specified ranges:
 }
 ```
 
-With normal distribution:
+Generate values with normal distribution:
 
 ```json
 "quantity": {
@@ -140,9 +307,18 @@ With normal distribution:
 }
 ```
 
-### File Parameters
+Select from a predefined set:
 
-Read values from text or CSV files:
+```json
+"status": {
+  "type": "random",
+  "range": ["pending", "active", "completed", "cancelled"]
+}
+```
+
+#### File Parameters
+
+Read values from a text file:
 
 ```json
 "authToken": {
@@ -152,55 +328,89 @@ Read values from text or CSV files:
 }
 ```
 
-## Dashboard Integration
-
-### Using InfluxDB and Grafana
-
-1. Enable InfluxDB integration in the config:
+Read values from a CSV file column:
 
 ```json
-"influxDb": {
-  "enabled": true,
-  "url": "http://localhost:8086",
-  "token": "your_influxdb_token",
-  "org": "your_org",
-  "bucket": "tps_metrics"
+"username": {
+  "type": "file",
+  "path": "users.csv",
+  "column": "username",
+  "selection": "random"
 }
 ```
 
-2. Import the provided Grafana dashboard template (in `dashboards/grafana-dashboard.json`)
+## Metrics and Reports
 
-### CSV Output
+TPS Generator collects comprehensive metrics during test execution:
+
+- **Request Counts**: Total, successful, failed, timed out, and skipped requests
+- **Response Times**: Min, max, average, and percentiles (P50, P90, P95, P99)
+- **TPS Rates**: Current, average, and maximum TPS
+- **Status Codes**: Distribution of HTTP status codes
+- **Resource Usage**: CPU, memory, thread counts
+- **Network Metrics**: Bytes sent and received, request and response sizes
 
 Test results are automatically exported to CSV files:
 - `results.csv`: Main test metrics
 - `tps_samples.csv`: TPS measurements over time
 - `resource_snapshots.csv`: CPU and memory usage over time
 
-## Advanced Configuration
+Example output:
 
-### Thread Pool Settings
-
-Configure the executor service:
-
-```json
-"threadPool": {
-  "coreSize": 20,
-  "maxSize": 50,
-  "queueSize": 100,
-  "keepAliveTime": "60s"
-}
 ```
+=== Test Summary ===
+Duration: 00:05:00
+Total Requests: 25000
+Successful Requests: 24850
+Failed Requests: 150
+Success Rate: 99.40%
+Average TPS: 83.33
+P95 Response Time: 245 ms
+Max CPU Usage: 78.20%
+Max Memory Usage: 512.45 MB
+==================
+```
+
+## Advanced Features
 
 ### Circuit Breaker
 
-Automatically stop tests when error rates are too high:
+The circuit breaker monitors success/failure rates and prevents excessive failures:
 
 ```json
 "circuitBreaker": {
   "enabled": true,
   "errorThreshold": 0.5,
   "windowSize": 100
+}
+```
+
+- `enabled`: Whether the circuit breaker is active
+- `errorThreshold`: Error rate threshold (0.0-1.0) that will trigger the circuit breaker
+- `windowSize`: Number of recent requests to consider for error rate calculation
+
+When the error rate exceeds the threshold, the circuit breaker "opens" and stops sending requests.
+
+### Dashboard Integration
+
+TPS Generator can send metrics to a dashboard service for visualization:
+
+```json
+"dashboard": {
+  "enabled": true,
+  "url": "http://localhost:8080",
+  "apiKey": "your-api-key"
+}
+```
+
+### Resource Monitoring
+
+Enable resource monitoring to track CPU, memory, and thread usage:
+
+```json
+"resourceMonitoring": {
+"enabled": true,
+"sampleInterval": "PT5S"
 }
 ```
 
