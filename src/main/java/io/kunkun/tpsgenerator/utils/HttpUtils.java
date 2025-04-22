@@ -220,4 +220,8 @@ public class HttpUtils {
                 }
         }
     }
+
+    public static void enableVerboseLogging() {
+        System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "DEBUG");
+    }
 }

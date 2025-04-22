@@ -6,6 +6,7 @@ import io.kunkun.tpsgenerator.metrics.MetricsCollector;
 import io.kunkun.tpsgenerator.metrics.exporter.CSVExporter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import io.kunkun.tpsgenerator.utils.HttpUtils;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
@@ -15,6 +16,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
 /**
@@ -28,6 +30,11 @@ public class TPSGeneratorApplication {
         if (args.length < 1) {
             printUsage();
             System.exit(1);
+        }
+
+        if (args.length > 2 && "--verbose".equals(args[2])) {
+            HttpUtils.enableVerboseLogging();
+            log.info("Verbose logging enabled");
         }
 
         String configFile = args[0];
@@ -60,6 +67,7 @@ public class TPSGeneratorApplication {
 
             // Export results
             String timestamp = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")
+                    .withZone(ZoneId.systemDefault())
                     .format(startTime);
             String resultsFile = String.format("%s/%s_%s.csv",
                     outputDir, config.getName(), timestamp);

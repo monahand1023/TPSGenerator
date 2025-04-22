@@ -23,7 +23,7 @@
       "name": "getResource",
       "weight": 70,
       "method": "GET",
-      "urlTemplate": "http://localhost:8080/resources/${resourceId}",
+      "urlTemplate": "http://localhost:8080/resources",
       "headers": {
         "Authorization": "Bearer token123",
         "Accept": "application/json"
@@ -66,10 +66,14 @@
     "outputFile": "results.csv",
     "resourceMonitoring": {
       "enabled": true,
-      "sampleInterval": "PT5S"
+      "sampleInterval": "5s"
     },
-    "influxDb": {
-      "enabled": false
+    "loggingOptions": {
+      "logRequests": true,
+      "logResponses": true,
+      "logRequestBodies": true,
+      "logResponseBodies": true,
+      "logInterval": "10s"
     }
   },
 
