@@ -231,12 +231,11 @@ public class ExecutionController {
                     double completionPercentage = 100.0 * elapsedTimeMs / totalDurationMs;
                     double currentTps = metricsCollector.getCurrentTps();
 
-                    log.info("Progress: {:.1f}% | Target TPS: {:.2f} | Actual TPS: {:.2f} | " +
-                                    "Success Rate: {:.2f}%",
-                            completionPercentage,
-                            targetTps,
-                            currentTps,
-                            metricsCollector.getTestMetrics().getSuccessRate() * 100);
+                    log.info("Progress: {}% | Target TPS: {} | Actual TPS: {} | Success Rate: {}%",
+                            String.format("%.1f", completionPercentage),
+                            String.format("%.2f", targetTps),
+                            String.format("%.2f", currentTps),
+                            String.format("%.2f", metricsCollector.getTestMetrics().getSuccessRate() * 100));
                 }
             } catch (Exception e) {
                 log.error("Error updating rate limiter", e);
