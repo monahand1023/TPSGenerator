@@ -1,0 +1,10 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="TPSGenerator Mock Test" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="io.kunkun.tpsgenerator.TPSGeneratorApplication" />
+    <module name="tps-generator" />
+    <option name="PROGRAM_PARAMETERS" value="mock-test-config.json results" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

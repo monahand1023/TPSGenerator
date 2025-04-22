@@ -1,0 +1,89 @@
+{
+  "name": "Mock API Load Test",
+  "targetServiceUrl": "http://localhost:8080",
+  "testDuration": "PT2M",
+
+  "trafficPattern": {
+    "type": "spike",
+    "targetTps": 30,
+    "spikeTps": 100,
+    "spikeStartTime": "PT45S",
+    "spikeDuration": "PT15S"
+  },
+
+  "threadPool": {
+    "coreSize": 20,
+    "maxSize": 50,
+    "queueSize": 100,
+    "keepAliveTime": "PT60S"
+  },
+
+  "requestTemplates": [
+    {
+      "name": "getResource",
+      "weight": 70,
+      "method": "GET",
+      "urlTemplate": "http://localhost:8080/resources/${resourceId}",
+      "headers": {
+        "Authorization": "Bearer ${authToken}",
+        "Accept": "application/json"
+      }
+    },
+    {
+      "name": "createResource",
+      "weight": 30,
+      "method": "POST",
+      "urlTemplate": "http://localhost:8080/orders",
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer ${authToken}"
+      },
+      "bodyTemplate": "{\"productId\":\"${productId}\",\"quantity\":${quantity}}"
+    }
+  ],
+
+  "parameterSources": {
+    "resourceId": {
+      "type": "random",
+      "range": [1, 1000]
+    },
+    "authToken": {
+      "type": "random",
+      "range": ["token1", "token2", "token3", "token4", "token5"]
+    },
+    "productId": {
+      "type": "random",
+      "range": [100, 999]
+    },
+    "quantity": {
+      "type": "random",
+      "distribution": "normal",
+      "mean": 3,
+      "stddev": 1,
+      "min": 1,
+      "max": 10
+    }
+  },
+
+  "metrics": {
+    "responseTimePercentiles": [50, 90, 95, 99],
+    "outputFile": "results.csv",
+    "resourceMonitoring": {
+      "enabled": true,
+      "sampleInterval": "5s"
+    },
+    "influxDb": {
+      "enabled": false,
+      "url": "http://localhost:8086",
+      "token": "your_influxdb_token",
+      "org": "your_org",
+      "bucket": "tps_metrics"
+    }
+  },
+
+  "circuitBreaker": {
+    "enabled": true,
+    "errorThreshold": 0.3,
+    "windowSize": 50
+  }
+}
