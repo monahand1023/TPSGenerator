@@ -25,7 +25,7 @@
         <hdrhistogram.version>2.1.12</hdrhistogram.version>
         <influxdb.version>6.7.0</influxdb.version>
         <commons.csv.version>1.10.0</commons.csv.version>
-        <lombok.version>1.18.26</lombok.version>
+        <lombok.version>1.18.38</lombok.version>
         <slf4j.version>2.0.7</slf4j.version>
         <logback.version>1.4.8</logback.version>
     </properties>

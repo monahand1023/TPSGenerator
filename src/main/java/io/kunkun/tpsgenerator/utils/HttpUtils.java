@@ -7,8 +7,10 @@ import java.net.URLEncoder;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Utility methods for HTTP operations.
@@ -90,8 +92,10 @@ public class HttpUtils {
 
         // We can't access the request body directly, so this is just an estimate
         // based on the content-length header if present
+        final AtomicLong contentSize = new AtomicLong(0);
         request.headers().firstValue("Content-Length")
-                .ifPresent(contentLength -> size += Long.parseLong(contentLength));
+                .ifPresent(contentLength -> contentSize.set(Long.parseLong(contentLength)));
+        size += contentSize.get();
 
         return size;
     }
