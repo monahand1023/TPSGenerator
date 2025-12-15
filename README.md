@@ -24,6 +24,8 @@ My solution here is a robust, flexible, and feature-rich load testing tool for g
     - [Circuit Breaker](#circuit-breaker)
     - [Dashboard Integration](#dashboard-integration)
     - [Resource Monitoring](#resource-monitoring)
+- [Testing](#testing)
+- [Performance Optimizations](#performance-optimizations)
 - [License](#license)
 
 ## Project Overview
@@ -50,8 +52,13 @@ The TPS Generator is built with a modular architecture focusing on separation of
 ### Core Components
 
 - **ExecutionController**: Orchestrates the test execution, manages threads, and controls traffic rates
-- **RequestExecutor**: Executes HTTP requests and collects performance metrics
-- **CircuitBreaker**: Monitors success/failure rates and prevents excessive failures
+- **RequestExecutor**: Executes HTTP requests and collects performance metrics (uses Builder pattern for configuration)
+- **CircuitBreaker**: Monitors success/failure rates and prevents excessive failures (with cached error rates for O(1) lookups)
+
+### Factory Classes
+
+- **TrafficPatternFactory**: Creates traffic pattern instances from configuration (stable, rampup, spike, custom)
+- **ParameterSourceFactory**: Creates parameter sources from configuration (random, file-based)
 
 ### Traffic Patterns
 
@@ -70,10 +77,14 @@ The tool supports various traffic pattern implementations:
 
 ### Metrics and Monitoring
 
-- **MetricsCollector**: Collects and aggregates test metrics
-- **ResourceMonitor**: Monitors system resources (CPU, memory, threads)
-- **ErrorAnalyzer**: Analyzes errors and failures during test execution
-- **ResponseValidator**: Validates HTTP responses against configured criteria
+- **MetricsCollector**: Collects and aggregates test metrics with periodic snapshot updates
+- **TestMetrics**: Aggregates all test metrics using composition pattern
+  - **ResponseTimeMetrics**: Tracks response times using HdrHistogram's lock-free Recorder pattern
+  - **StatusCodeMetrics**: Thread-safe status code tracking with ConcurrentHashMap
+  - **TpsMetrics**: Bounded TPS sample collection
+- **NetworkMetrics**: Tracks network-level metrics (bytes sent/received, response sizes)
+- **ResourceMonitor**: Monitors system resources (CPU, memory, threads) with bounded snapshot storage
+- **ErrorAnalyzer**: Analyzes errors and failures with optimized single-pass stream operations
 
 ### Reporting
 
@@ -473,6 +484,38 @@ Max Memory Usage: 96.34 MB
 
 Process finished with exit code 0
 ```
+
+## Testing
+
+The project includes comprehensive unit tests covering core functionality:
+
+```bash
+# Run all tests
+mvn test
+
+# Run specific test class
+mvn test -Dtest=CircuitBreakerTest
+```
+
+Test coverage includes:
+- **CircuitBreakerTest**: Circuit breaker state transitions and error rate calculations
+- **ResponseTimeMetricsTest**: Histogram recording, percentile calculations, thread safety
+- **StatusCodeMetricsTest**: Status code counting and retrieval
+- **TpsMetricsTest**: TPS sample recording with bounded storage
+- **TrafficPatternFactoryTest**: Factory pattern creation for all traffic types
+- **ParameterSourceFactoryTest**: Parameter source creation and validation
+- **CustomPatternTest**: CSV pattern loading and interpolation
+- **TestConfigTest**: Configuration validation
+
+## Performance Optimizations
+
+The codebase includes several performance optimizations:
+
+- **Lock-free histogram recording**: Uses HdrHistogram's Recorder pattern for concurrent response time recording without synchronization overhead
+- **Cached error rates**: CircuitBreaker caches error rates for O(1) lookups instead of recalculating on each request
+- **Binary search for custom patterns**: CustomPattern uses binary search (O(log n)) instead of linear search for TPS lookups
+- **Bounded collections**: ResourceMonitor and TpsMetrics use bounded collections to prevent memory growth during long tests
+- **Single-pass stream operations**: ErrorAnalyzer consolidates multiple stream passes into single iterations
 
 ## License
 

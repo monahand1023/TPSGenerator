@@ -4,6 +4,7 @@ import io.kunkun.tpsgenerator.model.ResourceSnapshot;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.Closeable;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.OperatingSystemMXBean;
@@ -19,9 +20,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Monitors system resources (CPU, memory, threads) during test execution.
+ * Implements Closeable for proper resource cleanup.
  */
 @Slf4j
-public class ResourceMonitor {
+public class ResourceMonitor implements Closeable {
+
+    /**
+     * Maximum number of snapshots to retain in memory.
+     * With 5-second intervals, this allows ~8.3 hours of data.
+     */
+    private static final int MAX_SNAPSHOTS = 6000;
 
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread thread = new Thread(r);
@@ -85,6 +93,15 @@ public class ResourceMonitor {
     }
 
     /**
+     * Closes this monitor and releases resources.
+     * This method delegates to stop().
+     */
+    @Override
+    public void close() {
+        stop();
+    }
+
+    /**
      * Captures a resource snapshot.
      */
     private void captureSnapshot() {
@@ -119,7 +136,13 @@ public class ResourceMonitor {
                     daemonThreads
             );
 
-            snapshots.add(snapshot);
+            // Add snapshot, removing oldest if at capacity
+            synchronized (snapshots) {
+                if (snapshots.size() >= MAX_SNAPSHOTS) {
+                    snapshots.remove(0);
+                }
+                snapshots.add(snapshot);
+            }
 
             // Update max values
             maxCpuUsage = Math.max(maxCpuUsage, cpuLoad);

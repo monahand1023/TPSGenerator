@@ -2,18 +2,15 @@ package io.kunkun.tpsgenerator.metrics;
 
 import io.kunkun.tpsgenerator.model.ResourceSnapshot;
 import lombok.Data;
-import org.HdrHistogram.Histogram;
+import lombok.Getter;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.LongAdder;
-import java.util.stream.Collectors;
 
 /**
  * Contains metrics collected during a test.
+ * Uses composition to delegate to specialized metrics classes.
  */
 @Data
 public class TestMetrics {
@@ -59,24 +56,22 @@ public class TestMetrics {
     private final LongAdder skippedCount = new LongAdder();
 
     /**
-     * Response time histogram.
+     * Response time metrics (histograms for response time and rate limiter wait).
      */
-    private final Histogram responseTimeHistogram = new Histogram(3);
+    @Getter
+    private final ResponseTimeMetrics responseTimeMetrics = new ResponseTimeMetrics();
 
     /**
-     * Rate limiter wait time histogram.
+     * Status code metrics.
      */
-    private final Histogram rateLimiterWaitHistogram = new Histogram(3);
+    @Getter
+    private final StatusCodeMetrics statusCodeMetrics = new StatusCodeMetrics();
 
     /**
-     * Status code counts.
+     * TPS metrics.
      */
-    private final Map<Integer, LongAdder> statusCodeCounts = new HashMap<>();
-
-    /**
-     * TPS samples over time.
-     */
-    private final List<TpsSample> tpsSamples = new CopyOnWriteArrayList<>();
+    @Getter
+    private final TpsMetrics tpsMetrics = new TpsMetrics();
 
     /**
      * Maximum CPU usage (percentage).
@@ -135,44 +130,42 @@ public class TestMetrics {
 
     /**
      * Records a response time.
+     * Delegates to ResponseTimeMetrics.
      *
      * @param responseTimeMs the response time in milliseconds
      */
     public void recordResponseTime(long responseTimeMs) {
-        synchronized (responseTimeHistogram) {
-            responseTimeHistogram.recordValue(responseTimeMs);
-        }
+        responseTimeMetrics.recordResponseTime(responseTimeMs);
     }
 
     /**
      * Records rate limiter wait time.
+     * Delegates to ResponseTimeMetrics.
      *
      * @param waitTimeSeconds the wait time in seconds
      */
     public void recordRateLimiterWait(double waitTimeSeconds) {
-        synchronized (rateLimiterWaitHistogram) {
-            // Convert to milliseconds
-            long waitTimeMs = (long) (waitTimeSeconds * 1000);
-            rateLimiterWaitHistogram.recordValue(waitTimeMs);
-        }
+        responseTimeMetrics.recordRateLimiterWait(waitTimeSeconds);
     }
 
     /**
      * Records a status code.
+     * Delegates to StatusCodeMetrics.
      *
      * @param statusCode the HTTP status code
      */
     public void recordStatusCode(int statusCode) {
-        statusCodeCounts.computeIfAbsent(statusCode, k -> new LongAdder()).increment();
+        statusCodeMetrics.recordStatusCode(statusCode);
     }
 
     /**
      * Records a TPS sample.
+     * Delegates to TpsMetrics.
      *
      * @param tps the TPS value
      */
     public void recordTps(long tps) {
-        tpsSamples.add(new TpsSample(System.currentTimeMillis(), tps));
+        tpsMetrics.recordTps(tps);
     }
 
     /**
@@ -232,72 +225,62 @@ public class TestMetrics {
 
     /**
      * Gets a response time percentile.
+     * Delegates to ResponseTimeMetrics.
      *
      * @param percentile the percentile (0-100)
      * @return the response time at the specified percentile
      */
     public long getResponseTimePercentile(double percentile) {
-        synchronized (responseTimeHistogram) {
-            return responseTimeHistogram.getValueAtPercentile(percentile);
-        }
+        return responseTimeMetrics.getResponseTimePercentile(percentile);
     }
 
     /**
      * Gets a rate limiter wait time percentile.
+     * Delegates to ResponseTimeMetrics.
      *
      * @param percentile the percentile (0-100)
      * @return the wait time at the specified percentile
      */
     public long getRateLimiterWaitPercentile(double percentile) {
-        synchronized (rateLimiterWaitHistogram) {
-            return rateLimiterWaitHistogram.getValueAtPercentile(percentile);
-        }
+        return responseTimeMetrics.getRateLimiterWaitPercentile(percentile);
     }
 
     /**
      * Gets the counts for each status code.
+     * Delegates to StatusCodeMetrics.
      *
      * @return a map of status code to count
      */
     public Map<Integer, Long> getStatusCodeCounts() {
-        return statusCodeCounts.entrySet().stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().sum()));
+        return statusCodeMetrics.getAllCounts();
     }
 
     /**
      * Gets the TPS samples.
+     * Delegates to TpsMetrics.
      *
      * @return the TPS samples
      */
-    public List<TpsSample> getTpsSamples() {
-        return new ArrayList<>(tpsSamples);
+    public List<TpsMetrics.TpsSample> getTpsSamples() {
+        return tpsMetrics.getSamples();
     }
 
     /**
      * Gets the maximum TPS recorded.
+     * Delegates to TpsMetrics.
      *
      * @return the maximum TPS
      */
     public long getMaxTps() {
-        return tpsSamples.stream()
-                .mapToLong(TpsSample::getTps)
-                .max()
-                .orElse(0);
+        return tpsMetrics.getMaxTps();
     }
 
     /**
-     * A TPS sample at a specific time.
+     * Updates the response time histogram snapshots.
+     * Should be called periodically (e.g., every second) to make recorded
+     * values available for reading percentiles.
      */
-    @Data
-    public static class TpsSample {
-        /**
-         * The timestamp of the sample in milliseconds.
-         */
-        private final long timestamp;
-
-        /**
-         * The TPS value.
-         */
-        private final long tps;
+    public void updateHistogramSnapshots() {
+        responseTimeMetrics.updateSnapshots();
     }
 }

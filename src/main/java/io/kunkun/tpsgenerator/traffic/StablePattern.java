@@ -2,12 +2,10 @@ package io.kunkun.tpsgenerator.traffic;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 
 /**
  * A traffic pattern that maintains a constant TPS rate throughout the test.
  */
-@Slf4j
 @RequiredArgsConstructor
 public class StablePattern implements TrafficPattern {
 

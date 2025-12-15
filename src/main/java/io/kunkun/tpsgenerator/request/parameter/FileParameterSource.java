@@ -43,8 +43,8 @@ public class FileParameterSource implements ParameterSource {
         try {
             loadValues();
             log.info("Loaded {} values from file '{}'", values.size(), filePath);
-        } catch (Exception e) {
-            log.error("Failed to load values from file '{}': {}", filePath, e.getMessage(), e);
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Failed to load values from file '" + filePath + "': " + e.getMessage(), e);
         }
     }
 
@@ -139,14 +139,15 @@ public class FileParameterSource implements ParameterSource {
     @Override
     public String getValue() {
         if (values.isEmpty()) {
-            return "error_empty_source";
+            throw new IllegalStateException("No values available from file parameter source: " + filePath);
         }
 
         if (randomSelection) {
             int index = random.nextInt(values.size());
             return values.get(index);
         } else {
-            int index = currentIndex.getAndIncrement() % values.size();
+            // Use getAndUpdate to prevent integer overflow issues
+            int index = currentIndex.getAndUpdate(i -> (i + 1) % values.size());
             return values.get(index);
         }
     }

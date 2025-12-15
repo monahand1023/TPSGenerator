@@ -2,13 +2,11 @@ package io.kunkun.tpsgenerator.traffic;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 
 /**
  * A traffic pattern that linearly increases the TPS rate from a start value to a target value.
  * After reaching the target value, it maintains that rate for the remainder of the test.
  */
-@Slf4j
 @RequiredArgsConstructor
 public class RampUpPattern implements TrafficPattern {
 

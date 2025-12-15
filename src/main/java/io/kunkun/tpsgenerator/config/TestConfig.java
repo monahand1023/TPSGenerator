@@ -18,6 +18,49 @@ import java.util.Map;
 public class TestConfig {
 
     /**
+     * Validates the configuration and throws an exception if invalid.
+     *
+     * @throws IllegalArgumentException if the configuration is invalid
+     */
+    public void validate() {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("Test name cannot be null or empty");
+        }
+
+        if (testDuration == null || testDuration.isNegative() || testDuration.isZero()) {
+            throw new IllegalArgumentException("Test duration must be a positive duration");
+        }
+
+        if (trafficPattern == null) {
+            throw new IllegalArgumentException("Traffic pattern configuration is required");
+        }
+
+        if (trafficPattern.getType() == null || trafficPattern.getType().isBlank()) {
+            throw new IllegalArgumentException("Traffic pattern type is required");
+        }
+
+        if (trafficPattern.getTargetTps() <= 0) {
+            throw new IllegalArgumentException("Target TPS must be positive");
+        }
+
+        if (threadPool == null) {
+            throw new IllegalArgumentException("Thread pool configuration is required");
+        }
+
+        if (threadPool.getCoreSize() <= 0) {
+            throw new IllegalArgumentException("Thread pool core size must be positive");
+        }
+
+        if (threadPool.getMaxSize() < threadPool.getCoreSize()) {
+            throw new IllegalArgumentException("Thread pool max size must be >= core size");
+        }
+
+        if (requestTemplates == null || requestTemplates.isEmpty()) {
+            throw new IllegalArgumentException("At least one request template is required");
+        }
+    }
+
+    /**
      * Name of the test.
      */
     private String name;
@@ -106,6 +149,11 @@ public class TestConfig {
          * Path to custom traffic pattern file (for custom pattern).
          */
         private String patternFile;
+
+        /**
+         * Whether time values in the pattern file are in milliseconds (true) or seconds (false).
+         */
+        private boolean timeInMilliseconds = false;
     }
 
     /**

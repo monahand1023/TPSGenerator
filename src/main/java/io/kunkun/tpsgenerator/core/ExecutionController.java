@@ -1,12 +1,10 @@
 package io.kunkun.tpsgenerator.core;
 
 import io.kunkun.tpsgenerator.config.TestConfig;
+import io.kunkun.tpsgenerator.factory.TrafficPatternFactory;
 import io.kunkun.tpsgenerator.metrics.MetricsCollector;
 import io.kunkun.tpsgenerator.model.TestResult;
 import io.kunkun.tpsgenerator.request.RequestGenerator;
-import io.kunkun.tpsgenerator.traffic.RampUpPattern;
-import io.kunkun.tpsgenerator.traffic.SpikePattern;
-import io.kunkun.tpsgenerator.traffic.StablePattern;
 import io.kunkun.tpsgenerator.traffic.TrafficPattern;
 import com.google.common.util.concurrent.RateLimiter;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +29,7 @@ public class ExecutionController {
     private final HttpClient httpClient;
     private final RequestGenerator requestGenerator;
     private final CircuitBreaker circuitBreaker;
+    private final TrafficPattern trafficPattern;
     private final AtomicBoolean testRunning = new AtomicBoolean(false);
     private final AtomicLong requestCounter = new AtomicLong(0);
     private final CountDownLatch completionLatch = new CountDownLatch(1);
@@ -45,8 +44,8 @@ public class ExecutionController {
         this.config = config;
         this.metricsCollector = metricsCollector;
 
-        // Create traffic pattern
-        TrafficPattern trafficPattern = createTrafficPattern(config);
+        // Create traffic pattern using factory
+        this.trafficPattern = TrafficPatternFactory.create(config.getTrafficPattern());
 
         // Initialize thread pool
         this.executor = new ThreadPoolExecutor(
@@ -68,7 +67,7 @@ public class ExecutionController {
         );
 
         // Initialize rate limiter with initial rate
-        double initialTps = trafficPattern.getTpsAtTime(0, config.getTestDuration().toMillis());
+        double initialTps = this.trafficPattern.getTpsAtTime(0, config.getTestDuration().toMillis());
         this.rateLimiter = RateLimiter.create(initialTps);
 
         // Initialize scheduler for rate updates
@@ -96,40 +95,6 @@ public class ExecutionController {
     }
 
     /**
-     * Creates a traffic pattern based on the test configuration.
-     *
-     * @param config the test configuration
-     * @return the traffic pattern
-     */
-    private TrafficPattern createTrafficPattern(TestConfig config) {
-        TestConfig.TrafficConfig trafficConfig = config.getTrafficPattern();
-        String patternType = trafficConfig.getType();
-
-        switch (patternType.toLowerCase()) {
-            case "stable":
-                return new StablePattern(trafficConfig.getTargetTps());
-
-            case "rampup":
-                return new RampUpPattern(
-                        trafficConfig.getStartTps(),
-                        trafficConfig.getTargetTps(),
-                        trafficConfig.getRampDuration().toMillis()
-                );
-
-            case "spike":
-                return new SpikePattern(
-                        trafficConfig.getTargetTps(),
-                        trafficConfig.getSpikeTps(),
-                        trafficConfig.getSpikeStartTime().toMillis(),
-                        trafficConfig.getSpikeDuration().toMillis()
-                );
-
-            default:
-                throw new IllegalArgumentException("Unsupported traffic pattern type: " + patternType);
-        }
-    }
-
-    /**
      * Executes the load test.
      *
      * @return the test result
@@ -140,81 +105,149 @@ public class ExecutionController {
             throw new IllegalStateException("Test is already running");
         }
 
-        try {
-            // Start metrics collector
-            metricsCollector.start();
+        long testStartTime = System.currentTimeMillis();
 
-            // Start traffic pattern scheduler
+        try {
+            startMetricsCollection();
             startTrafficPatternScheduler();
 
-            // Start request executor
-            RequestExecutor requestExecutor = new RequestExecutor(
-                    httpClient,
-                    requestGenerator,
-                    rateLimiter,
-                    metricsCollector,
-                    circuitBreaker
-            );
+            RequestExecutor requestExecutor = createRequestExecutor();
+            executeMainLoop(requestExecutor, testStartTime);
 
-            // Execute requests until duration expires
-            long testStartTime = System.currentTimeMillis();
-            long testEndTime = testStartTime + config.getTestDuration().toMillis();
-
-            log.info("Test started, will run for {} seconds", config.getTestDuration().getSeconds());
-
-            while (System.currentTimeMillis() < testEndTime && !Thread.currentThread().isInterrupted()) {
-                // Check if circuit breaker is open
-                if (circuitBreaker != null && !circuitBreaker.allowRequest()) {
-                    log.warn("Circuit breaker is open, stopping test");
-                    break;
-                }
-
-                long requestId = requestCounter.incrementAndGet();
-
-                // Submit request task to executor
-                executor.submit(() -> {
-                    long requestStartTime = System.currentTimeMillis();
-                    // Calculate elapsed time from the test start
-                    long elapsedTime = requestStartTime - testStartTime;
-
-                    // Execute the request
-                    requestExecutor.executeRequest(requestId, elapsedTime);
-                });
-
-                // Small sleep to prevent CPU spinning
-                Thread.sleep(1);
-            }
-
-            log.info("Test execution completed, waiting for pending requests to finish");
-
-            // Shutdown executor and wait for pending tasks to complete
-            executor.shutdown();
-            executor.awaitTermination(30, TimeUnit.SECONDS);
-
-            // Signal completion
-            completionLatch.countDown();
-
-            // Stop metrics collector
-            metricsCollector.stop();
-
-            return new TestResult(
-                    config.getName(),
-                    testStartTime,
-                    System.currentTimeMillis(),
-                    metricsCollector.getTestMetrics()
-            );
+            return completeTest(testStartTime);
 
         } finally {
-            testRunning.set(false);
-            scheduler.shutdownNow();
+            cleanup();
         }
+    }
+
+    /**
+     * Starts the metrics collection.
+     */
+    private void startMetricsCollection() {
+        metricsCollector.start();
+    }
+
+    /**
+     * Creates and configures the request executor.
+     *
+     * @return the configured RequestExecutor
+     */
+    private RequestExecutor createRequestExecutor() {
+        return RequestExecutor.builder()
+                .httpClient(httpClient)
+                .requestGenerator(requestGenerator)
+                .rateLimiter(rateLimiter)
+                .metricsCollector(metricsCollector)
+                .circuitBreaker(circuitBreaker)
+                .build();
+    }
+
+    /**
+     * Executes the main test loop, submitting requests until the test duration expires
+     * or the circuit breaker opens.
+     *
+     * @param requestExecutor the request executor to use
+     * @param testStartTime the test start time in milliseconds
+     * @throws InterruptedException if the thread is interrupted
+     */
+    private void executeMainLoop(RequestExecutor requestExecutor, long testStartTime) throws InterruptedException {
+        long testEndTime = testStartTime + config.getTestDuration().toMillis();
+
+        log.info("Test started, will run for {} seconds", config.getTestDuration().getSeconds());
+
+        while (System.currentTimeMillis() < testEndTime && !Thread.currentThread().isInterrupted()) {
+            if (isCircuitBreakerOpen()) {
+                log.warn("Circuit breaker is open, stopping test");
+                break;
+            }
+
+            submitRequest(requestExecutor, testStartTime);
+
+            // Small sleep to prevent CPU spinning
+            Thread.sleep(1);
+        }
+    }
+
+    /**
+     * Checks if the circuit breaker is open.
+     *
+     * @return true if the circuit breaker is open, false otherwise
+     */
+    private boolean isCircuitBreakerOpen() {
+        return circuitBreaker != null && !circuitBreaker.allowRequest();
+    }
+
+    /**
+     * Submits a single request to the executor.
+     *
+     * @param requestExecutor the request executor
+     * @param testStartTime the test start time
+     */
+    private void submitRequest(RequestExecutor requestExecutor, long testStartTime) {
+        long requestId = requestCounter.incrementAndGet();
+
+        executor.submit(() -> {
+            long requestStartTime = System.currentTimeMillis();
+            long elapsedTime = requestStartTime - testStartTime;
+            requestExecutor.executeRequest(requestId, elapsedTime);
+        });
+    }
+
+    /**
+     * Completes the test by shutting down executors and building the result.
+     *
+     * @param testStartTime the test start time
+     * @return the test result
+     * @throws InterruptedException if interrupted while waiting for shutdown
+     */
+    private TestResult completeTest(long testStartTime) throws InterruptedException {
+        log.info("Test execution completed, waiting for pending requests to finish");
+
+        shutdownExecutor();
+        completionLatch.countDown();
+        metricsCollector.stop();
+
+        return buildTestResult(testStartTime);
+    }
+
+    /**
+     * Shuts down the executor and waits for pending tasks.
+     *
+     * @throws InterruptedException if interrupted while waiting
+     */
+    private void shutdownExecutor() throws InterruptedException {
+        executor.shutdown();
+        executor.awaitTermination(30, TimeUnit.SECONDS);
+    }
+
+    /**
+     * Builds the test result.
+     *
+     * @param testStartTime the test start time
+     * @return the test result
+     */
+    private TestResult buildTestResult(long testStartTime) {
+        return new TestResult(
+                config.getName(),
+                testStartTime,
+                System.currentTimeMillis(),
+                metricsCollector.getTestMetrics()
+        );
+    }
+
+    /**
+     * Cleans up resources after test execution.
+     */
+    private void cleanup() {
+        testRunning.set(false);
+        scheduler.shutdownNow();
     }
 
     /**
      * Starts the scheduler that updates the rate limiter based on the traffic pattern.
      */
     private void startTrafficPatternScheduler() {
-        TrafficPattern trafficPattern = createTrafficPattern(config);
         long totalDurationMs = config.getTestDuration().toMillis();
 
         // Schedule rate updates every second

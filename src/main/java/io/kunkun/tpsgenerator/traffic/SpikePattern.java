@@ -1,12 +1,10 @@
 package io.kunkun.tpsgenerator.traffic;
 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 
 /**
  * A traffic pattern that maintains a base TPS rate with a spike of higher TPS at a specific time.
  */
-@Slf4j
 @RequiredArgsConstructor
 public class SpikePattern implements TrafficPattern {
 

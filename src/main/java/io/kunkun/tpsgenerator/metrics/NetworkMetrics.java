@@ -4,6 +4,7 @@ import lombok.Getter;
 import org.HdrHistogram.Histogram;
 
 import java.net.http.HttpResponse;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.LongAdder;
@@ -157,5 +158,32 @@ public class NetworkMetrics {
      */
     public double getTotalTrafficMB() {
         return getTotalTraffic() / (1024.0 * 1024.0);
+    }
+
+    /**
+     * Estimates the size of an HTTP response in bytes.
+     * This includes the body size and header sizes.
+     *
+     * @param response the HTTP response
+     * @return the estimated size in bytes
+     */
+    public static long estimateResponseSize(HttpResponse<String> response) {
+        long size = 0;
+
+        // Add body size
+        String body = response.body();
+        if (body != null) {
+            size += body.getBytes().length;
+        }
+
+        // Add headers size (key + values)
+        for (Map.Entry<String, List<String>> entry : response.headers().map().entrySet()) {
+            size += entry.getKey().getBytes().length;
+            for (String value : entry.getValue()) {
+                size += value.getBytes().length;
+            }
+        }
+
+        return size;
     }
 }

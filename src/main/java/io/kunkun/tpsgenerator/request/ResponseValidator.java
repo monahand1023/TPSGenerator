@@ -60,8 +60,11 @@ public class ResponseValidator {
                 ValidationRuleType.BODY_CONTAINS,
                 String.format("Response body must contain '%s'", expectedText),
                 response -> {
-                    String body = response.body().toString();
-                    return body.contains(expectedText);
+                    Object body = response.body();
+                    if (body == null) {
+                        return false;
+                    }
+                    return body.toString().contains(expectedText);
                 }
         );
         validationRules.add(rule);
@@ -79,8 +82,11 @@ public class ResponseValidator {
                 ValidationRuleType.BODY_PATTERN,
                 String.format("Response body must match pattern '%s'", pattern.pattern()),
                 response -> {
-                    String body = response.body().toString();
-                    return pattern.matcher(body).find();
+                    Object body = response.body();
+                    if (body == null) {
+                        return false;
+                    }
+                    return pattern.matcher(body.toString()).find();
                 }
         );
         validationRules.add(rule);
@@ -121,7 +127,11 @@ public class ResponseValidator {
                 ValidationRuleType.SIZE_RANGE,
                 String.format("Response size must be between %d and %d bytes", minBytes, maxBytes),
                 response -> {
-                    int size = response.body().toString().getBytes().length;
+                    Object body = response.body();
+                    if (body == null) {
+                        return minBytes == 0;
+                    }
+                    int size = body.toString().getBytes().length;
                     return size >= minBytes && size <= maxBytes;
                 }
         );

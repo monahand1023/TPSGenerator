@@ -114,17 +114,11 @@ public class CustomPattern implements TrafficPattern {
             return dataPoints.get(dataPoints.size() - 1).tps;
         }
 
-        // Find the surrounding data points
-        DataPoint before = dataPoints.get(0);
-        DataPoint after = dataPoints.get(dataPoints.size() - 1);
+        // Use binary search to find the surrounding data points (O(log n) instead of O(n))
+        int index = binarySearchForTime(elapsedTimeMs);
 
-        for (int i = 0; i < dataPoints.size() - 1; i++) {
-            if (dataPoints.get(i).timeMs <= elapsedTimeMs && dataPoints.get(i + 1).timeMs > elapsedTimeMs) {
-                before = dataPoints.get(i);
-                after = dataPoints.get(i + 1);
-                break;
-            }
-        }
+        DataPoint before = dataPoints.get(index);
+        DataPoint after = dataPoints.get(index + 1);
 
         // Interpolate between the two points
         if (after.timeMs == before.timeMs) {
@@ -133,6 +127,29 @@ public class CustomPattern implements TrafficPattern {
 
         double ratio = (double) (elapsedTimeMs - before.timeMs) / (after.timeMs - before.timeMs);
         return before.tps + ratio * (after.tps - before.tps);
+    }
+
+    /**
+     * Performs binary search to find the index of the data point
+     * whose timeMs is less than or equal to the target time.
+     *
+     * @param targetTimeMs the target time in milliseconds
+     * @return the index of the data point before or at the target time
+     */
+    private int binarySearchForTime(long targetTimeMs) {
+        int low = 0;
+        int high = dataPoints.size() - 1;
+
+        while (low < high) {
+            int mid = low + (high - low + 1) / 2;
+            if (dataPoints.get(mid).timeMs <= targetTimeMs) {
+                low = mid;
+            } else {
+                high = mid - 1;
+            }
+        }
+
+        return low;
     }
 
     @Override

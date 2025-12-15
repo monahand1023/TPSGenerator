@@ -5,6 +5,7 @@ import io.kunkun.tpsgenerator.model.ResourceSnapshot;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.Closeable;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
@@ -20,9 +21,10 @@ import java.util.concurrent.atomic.LongAdder;
 
 /**
  * Collects and aggregates metrics for a load test.
+ * Implements Closeable for proper resource cleanup.
  */
 @Slf4j
-public class MetricsCollector {
+public class MetricsCollector implements Closeable {
 
     private final TestConfig config;
 
@@ -43,11 +45,10 @@ public class MetricsCollector {
     private final Map<Long, RequestInfo> activeRequests = new ConcurrentHashMap<>();
 
     @Getter
-    private long startTime;
+    private volatile long startTime;
 
     private final LongAdder requestsLastSecond = new LongAdder();
     private final AtomicLong currentTps = new AtomicLong(0);
-    private final AtomicLong lastTpsUpdateTime = new AtomicLong(0);
 
     /**
      * Creates a new MetricsCollector.
@@ -103,11 +104,25 @@ public class MetricsCollector {
             // Stop scheduler
             scheduler.shutdownNow();
 
+            // Stop resource monitor if running
+            if (resourceMonitor != null) {
+                resourceMonitor.stop();
+            }
+
             // Calculate final metrics
             calculateFinalMetrics();
 
             log.info("Stopped metrics collection, test duration: {} ms", testMetrics.getDuration());
         }
+    }
+
+    /**
+     * Closes this collector and releases resources.
+     * This method delegates to stop().
+     */
+    @Override
+    public void close() {
+        stop();
     }
 
     /**
@@ -154,7 +169,7 @@ public class MetricsCollector {
             }
 
             // Record network metrics
-            networkMetrics.recordResponse(response, estimateResponseSize(response));
+            networkMetrics.recordResponse(response, NetworkMetrics.estimateResponseSize(response));
         }
 
         // Increment requests counter for TPS calculation
@@ -234,14 +249,17 @@ public class MetricsCollector {
     }
 
     /**
-     * Updates the current TPS value.
+     * Updates the current TPS value and histogram snapshots.
+     * Called periodically by the scheduler.
      */
     private void updateTps() {
         try {
             long tps = requestsLastSecond.sumThenReset();
             currentTps.set(tps);
             testMetrics.recordTps(tps);
-            lastTpsUpdateTime.set(System.currentTimeMillis());
+
+            // Update histogram snapshots for lock-free reading
+            testMetrics.updateHistogramSnapshots();
         } catch (Exception e) {
             log.error("Error updating TPS", e);
         }
@@ -251,6 +269,9 @@ public class MetricsCollector {
      * Calculates final metrics after the test is complete.
      */
     private void calculateFinalMetrics() {
+        // Final snapshot update to capture any remaining recorded values
+        testMetrics.updateHistogramSnapshots();
+
         // Calculate average TPS
         if (testMetrics.getDuration() > 0) {
             double avgTps = 1000.0 * testMetrics.getTotalRequests() / testMetrics.getDuration();
@@ -263,32 +284,6 @@ public class MetricsCollector {
             testMetrics.setMaxMemoryUsage(resourceMonitor.getMaxMemoryUsage());
             testMetrics.setResourceSnapshots(resourceMonitor.getSnapshots());
         }
-    }
-
-    /**
-     * Estimates the size of an HTTP response in bytes.
-     *
-     * @param response the HTTP response
-     * @return the estimated size in bytes
-     */
-    private long estimateResponseSize(HttpResponse<String> response) {
-        long size = 0;
-
-        // Add body size
-        String body = response.body();
-        if (body != null) {
-            size += body.getBytes().length;
-        }
-
-        // Add headers size
-        for (Map.Entry<String, List<String>> entry : response.headers().map().entrySet()) {
-            size += entry.getKey().getBytes().length;
-            for (String value : entry.getValue()) {
-                size += value.getBytes().length;
-            }
-        }
-
-        return size;
     }
 
     /**

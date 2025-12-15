@@ -1,7 +1,6 @@
 package io.kunkun.tpsgenerator.request.parameter;
 
 import lombok.AllArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
@@ -9,7 +8,6 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * Parameter source that generates random values.
  */
-@Slf4j
 public abstract class RandomParameterSource implements ParameterSource {
 
     /**

@@ -1,9 +1,8 @@
 package io.kunkun.tpsgenerator.request;
 
 import io.kunkun.tpsgenerator.config.TestConfig;
-import io.kunkun.tpsgenerator.request.parameter.FileParameterSource;
+import io.kunkun.tpsgenerator.factory.ParameterSourceFactory;
 import io.kunkun.tpsgenerator.request.parameter.ParameterSource;
-import io.kunkun.tpsgenerator.request.parameter.RandomParameterSource;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.http.HttpRequest;
@@ -34,14 +33,14 @@ public class RequestGenerator {
     public RequestGenerator(TestConfig config) {
         this.requestTemplates = config.getRequestTemplates();
 
-        // Initialize parameter sources
+        // Initialize parameter sources using factory
         for (Map.Entry<String, TestConfig.ParameterSourceConfig> entry :
                 config.getParameterSources().entrySet()) {
             String paramName = entry.getKey();
             TestConfig.ParameterSourceConfig sourceConfig = entry.getValue();
 
             try {
-                ParameterSource source = createParameterSource(sourceConfig);
+                ParameterSource source = ParameterSourceFactory.create(sourceConfig);
                 parameterSources.put(paramName, source);
                 log.info("Initialized parameter source for '{}'", paramName);
             } catch (Exception e) {
@@ -61,67 +60,6 @@ public class RequestGenerator {
 
         log.info("Initialized request generator with {} templates and {} parameter sources",
                 requestTemplates.size(), parameterSources.size());
-    }
-
-    /**
-     * Creates a parameter source from configuration.
-     *
-     * @param config the parameter source configuration
-     * @return the parameter source
-     */
-    private ParameterSource createParameterSource(TestConfig.ParameterSourceConfig config) {
-        String type = config.getType();
-
-        switch (type.toLowerCase()) {
-            case "random":
-                return createRandomParameterSource(config);
-
-            case "file":
-                return createFileParameterSource(config);
-
-            default:
-                throw new IllegalArgumentException("Unsupported parameter source type: " + type);
-        }
-    }
-
-    /**
-     * Creates a random parameter source from configuration.
-     *
-     * @param config the parameter source configuration
-     * @return the random parameter source
-     */
-    private RandomParameterSource createRandomParameterSource(TestConfig.ParameterSourceConfig config) {
-        String distribution = config.getDistribution();
-
-        if (distribution == null || distribution.equalsIgnoreCase("uniform")) {
-            int min = (config.getRange() != null && config.getRange().length > 0)
-                    ? config.getRange()[0] : (int) config.getMin();
-            int max = (config.getRange() != null && config.getRange().length > 1)
-                    ? config.getRange()[1] : (int) config.getMax();
-
-            return new RandomParameterSource.UniformIntegerSource(min, max);
-        } else if (distribution.equalsIgnoreCase("normal")) {
-            return new RandomParameterSource.NormalDistributionSource(
-                    config.getMean(), config.getStddev(), config.getMin(), config.getMax());
-        } else {
-            throw new IllegalArgumentException("Unsupported distribution type: " + distribution);
-        }
-    }
-
-    /**
-     * Creates a file parameter source from configuration.
-     *
-     * @param config the parameter source configuration
-     * @return the file parameter source
-     */
-    private FileParameterSource createFileParameterSource(TestConfig.ParameterSourceConfig config) {
-        String path = config.getPath();
-        String column = config.getColumn();
-        String selection = config.getSelection();
-
-        boolean isRandom = "random".equalsIgnoreCase(selection);
-
-        return new FileParameterSource(path, column, isRandom);
     }
 
     /**

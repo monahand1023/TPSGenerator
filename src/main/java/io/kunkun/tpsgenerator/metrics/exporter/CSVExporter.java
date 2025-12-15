@@ -134,6 +134,11 @@ public class CSVExporter {
      * @throws IOException if writing to the file fails
      */
     private void exportResourceSnapshots(List<ResourceSnapshot> snapshots, File outputFile) throws IOException {
+        if (snapshots == null || snapshots.isEmpty()) {
+            log.warn("No resource snapshots to export");
+            return;
+        }
+
         try (FileWriter writer = new FileWriter(outputFile)) {
             CSVPrinter printer = CSVFormat.DEFAULT
                     .withHeader(

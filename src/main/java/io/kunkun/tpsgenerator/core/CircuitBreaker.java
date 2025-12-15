@@ -5,6 +5,7 @@ import org.apache.commons.collections4.queue.CircularFifoQueue;
 
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -40,6 +41,11 @@ public class CircuitBreaker {
      * Lock for safely accessing the results queue.
      */
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
+
+    /**
+     * Cached error rate to avoid recalculating on every access.
+     */
+    private final AtomicReference<Double> cachedErrorRate = new AtomicReference<>(0.0);
 
     /**
      * The time when the circuit breaker was opened.
@@ -84,9 +90,13 @@ public class CircuitBreaker {
         try {
             results.add(success);
 
-            // Only check the error rate if we have enough data
+            // Calculate and cache the error rate
+            double errorRate = calculateErrorRate();
+            cachedErrorRate.set(errorRate);
+
+            // Only check the circuit state if we have enough data
             if (results.size() >= windowSize) {
-                updateCircuitState();
+                updateCircuitState(errorRate);
             }
         } finally {
             lock.writeLock().unlock();
@@ -94,28 +104,37 @@ public class CircuitBreaker {
     }
 
     /**
-     * Updates the circuit state based on the current error rate.
+     * Calculates the current error rate from the results queue.
+     * Must be called while holding a lock.
+     *
+     * @return the error rate (0.0 - 1.0)
      */
-    private void updateCircuitState() {
-        lock.readLock().lock();
-        try {
-            // Count failures
-            long failureCount = results.stream()
-                    .filter(result -> !result)
-                    .count();
-
-            // Calculate error rate
-            double errorRate = (double) failureCount / results.size();
-
-            // Check if we should open the circuit
-            if (!isOpen.get() && errorRate > errorThreshold) {
-                openCircuit(errorRate);
-            }
-            // We could add auto-reset logic here if desired
-
-        } finally {
-            lock.readLock().unlock();
+    private double calculateErrorRate() {
+        if (results.isEmpty()) {
+            return 0.0;
         }
+
+        long failureCount = 0;
+        for (Boolean result : results) {
+            if (!result) {
+                failureCount++;
+            }
+        }
+
+        return (double) failureCount / results.size();
+    }
+
+    /**
+     * Updates the circuit state based on the current error rate.
+     *
+     * @param errorRate the calculated error rate
+     */
+    private void updateCircuitState(double errorRate) {
+        // Check if we should open the circuit
+        if (!isOpen.get() && errorRate > errorThreshold) {
+            openCircuit(errorRate);
+        }
+        // We could add auto-reset logic here if desired
     }
 
     /**
@@ -148,24 +167,12 @@ public class CircuitBreaker {
 
     /**
      * Gets the current error rate.
+     * Uses a cached value for efficiency, updated on each recordResult call.
      *
      * @return the current error rate or 0.0 if no data is available
      */
     public double getCurrentErrorRate() {
-        lock.readLock().lock();
-        try {
-            if (results.isEmpty()) {
-                return 0.0;
-            }
-
-            long failureCount = results.stream()
-                    .filter(result -> !result)
-                    .count();
-
-            return (double) failureCount / results.size();
-        } finally {
-            lock.readLock().unlock();
-        }
+        return cachedErrorRate.get();
     }
 
     /**

@@ -125,9 +125,9 @@ public class ErrorAnalyzer {
      * @return a map of status code to count, sorted by count in descending order
      */
     public Map<Integer, Integer> getTopErrorStatusCodes(int limit) {
+        // Single-pass stream operation: map to size, sort, limit, and collect
         return errorResponseSamples.entrySet().stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().size()))
-                .entrySet().stream()
+                .map(e -> Map.entry(e.getKey(), e.getValue().size()))
                 .sorted(Map.Entry.<Integer, Integer>comparingByValue().reversed())
                 .limit(limit)
                 .collect(Collectors.toMap(

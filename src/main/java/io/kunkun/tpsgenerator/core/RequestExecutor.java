@@ -3,12 +3,12 @@ package io.kunkun.tpsgenerator.core;
 import io.kunkun.tpsgenerator.metrics.MetricsCollector;
 import io.kunkun.tpsgenerator.request.RequestGenerator;
 import com.google.common.util.concurrent.RateLimiter;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -17,7 +17,6 @@ import java.util.concurrent.TimeoutException;
  * Executes HTTP requests and collects metrics.
  */
 @Slf4j
-@RequiredArgsConstructor
 public class RequestExecutor {
 
     private final HttpClient httpClient;
@@ -25,6 +24,104 @@ public class RequestExecutor {
     private final RateLimiter rateLimiter;
     private final MetricsCollector metricsCollector;
     private final CircuitBreaker circuitBreaker;
+
+    /**
+     * Creates a new RequestExecutor using the builder.
+     *
+     * @param builder the builder
+     */
+    private RequestExecutor(Builder builder) {
+        this.httpClient = Objects.requireNonNull(builder.httpClient, "httpClient is required");
+        this.requestGenerator = Objects.requireNonNull(builder.requestGenerator, "requestGenerator is required");
+        this.rateLimiter = Objects.requireNonNull(builder.rateLimiter, "rateLimiter is required");
+        this.metricsCollector = Objects.requireNonNull(builder.metricsCollector, "metricsCollector is required");
+        this.circuitBreaker = builder.circuitBreaker; // Optional, can be null
+    }
+
+    /**
+     * Creates a new builder for RequestExecutor.
+     *
+     * @return a new builder
+     */
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    /**
+     * Builder for RequestExecutor.
+     */
+    public static class Builder {
+        private HttpClient httpClient;
+        private RequestGenerator requestGenerator;
+        private RateLimiter rateLimiter;
+        private MetricsCollector metricsCollector;
+        private CircuitBreaker circuitBreaker;
+
+        /**
+         * Sets the HTTP client.
+         *
+         * @param httpClient the HTTP client
+         * @return this builder
+         */
+        public Builder httpClient(HttpClient httpClient) {
+            this.httpClient = httpClient;
+            return this;
+        }
+
+        /**
+         * Sets the request generator.
+         *
+         * @param requestGenerator the request generator
+         * @return this builder
+         */
+        public Builder requestGenerator(RequestGenerator requestGenerator) {
+            this.requestGenerator = requestGenerator;
+            return this;
+        }
+
+        /**
+         * Sets the rate limiter.
+         *
+         * @param rateLimiter the rate limiter
+         * @return this builder
+         */
+        public Builder rateLimiter(RateLimiter rateLimiter) {
+            this.rateLimiter = rateLimiter;
+            return this;
+        }
+
+        /**
+         * Sets the metrics collector.
+         *
+         * @param metricsCollector the metrics collector
+         * @return this builder
+         */
+        public Builder metricsCollector(MetricsCollector metricsCollector) {
+            this.metricsCollector = metricsCollector;
+            return this;
+        }
+
+        /**
+         * Sets the circuit breaker (optional).
+         *
+         * @param circuitBreaker the circuit breaker, or null to disable
+         * @return this builder
+         */
+        public Builder circuitBreaker(CircuitBreaker circuitBreaker) {
+            this.circuitBreaker = circuitBreaker;
+            return this;
+        }
+
+        /**
+         * Builds the RequestExecutor.
+         *
+         * @return the RequestExecutor
+         * @throws NullPointerException if required fields are not set
+         */
+        public RequestExecutor build() {
+            return new RequestExecutor(this);
+        }
+    }
 
     /**
      * Executes a single HTTP request.
