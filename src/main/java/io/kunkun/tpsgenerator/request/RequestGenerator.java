@@ -67,7 +67,8 @@ public class RequestGenerator {
      *
      * @param requestId the request ID
      * @param elapsedTimeMs the elapsed time since test start in milliseconds
-     * @return the generated HTTP request or null if generation fails
+     * @return the generated HTTP request
+     * @throws RequestGenerationException if request generation fails
      */
     public HttpRequest generateRequest(long requestId, long elapsedTimeMs) {
         try {
@@ -81,8 +82,9 @@ public class RequestGenerator {
             return template.generate(parameters);
 
         } catch (Exception e) {
-            log.error("Failed to generate request {}: {}", requestId, e.getMessage(), e);
-            return null;
+            String message = String.format("Failed to generate request %d: %s", requestId, e.getMessage());
+            log.error(message, e);
+            throw new RequestGenerationException(message, e);
         }
     }
 

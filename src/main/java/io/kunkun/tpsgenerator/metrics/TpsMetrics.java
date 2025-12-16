@@ -1,5 +1,6 @@
 package io.kunkun.tpsgenerator.metrics;
 
+import io.kunkun.tpsgenerator.config.Constants;
 import lombok.Data;
 
 import java.util.ArrayList;
@@ -15,7 +16,7 @@ public class TpsMetrics {
     /**
      * Default maximum number of TPS samples to retain.
      */
-    private static final int DEFAULT_MAX_SAMPLES = 60000;
+    private static final int DEFAULT_MAX_SAMPLES = Constants.MAX_TPS_SAMPLES;
 
     /**
      * Maximum number of TPS samples to retain in memory.

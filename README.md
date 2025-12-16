@@ -74,10 +74,13 @@ The tool supports various traffic pattern implementations:
 - **RequestGenerator**: Generates HTTP requests based on templates and parameter sources
 - **RequestTemplate**: Defines the structure of requests with parameter placeholders
 - **Parameter Sources**: Provide values for parameters (file-based, random)
+- **ResponseValidator**: Optional response validation with body and status code checks
 
 ### Metrics and Monitoring
 
 - **MetricsCollector**: Collects and aggregates test metrics with periodic snapshot updates
+  - **RequestTracker**: Tracks active HTTP requests with timing information
+  - **TpsCalculator**: Calculates real-time TPS using lock-free counters
 - **TestMetrics**: Aggregates all test metrics using composition pattern
   - **ResponseTimeMetrics**: Tracks response times using HdrHistogram's lock-free Recorder pattern
   - **StatusCodeMetrics**: Thread-safe status code tracking with ConcurrentHashMap
@@ -516,6 +519,9 @@ The codebase includes several performance optimizations:
 - **Binary search for custom patterns**: CustomPattern uses binary search (O(log n)) instead of linear search for TPS lookups
 - **Bounded collections**: ResourceMonitor and TpsMetrics use bounded collections to prevent memory growth during long tests
 - **Single-pass stream operations**: ErrorAnalyzer consolidates multiple stream passes into single iterations
+- **Thread-safe bounded deques**: ErrorAnalyzer uses LinkedBlockingDeque for memory-bounded error sample storage
+- **Centralized constants**: All magic numbers are centralized in the Constants class for easy configuration
+- **Proper resource cleanup**: ExecutionController implements Closeable with shutdown hooks for graceful cleanup
 
 ## License
 

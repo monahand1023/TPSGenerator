@@ -1,5 +1,6 @@
 package io.kunkun.tpsgenerator.request.parameter;
 
+import io.kunkun.tpsgenerator.config.Constants;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
@@ -21,12 +22,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 public class FileParameterSource implements ParameterSource {
 
+    /**
+     * Maximum number of lines to load from a file to prevent memory issues.
+     */
+    private static final int MAX_LINES = Constants.MAX_PARAMETER_FILE_LINES;
+
     private final String filePath;
     private final String columnName;
     private final boolean randomSelection;
     private final List<String> values = new ArrayList<>();
     private final AtomicInteger currentIndex = new AtomicInteger(0);
     private final Random random = new Random();
+    private volatile boolean initialized = false;
 
     /**
      * Creates a new file parameter source.
@@ -42,6 +49,7 @@ public class FileParameterSource implements ParameterSource {
 
         try {
             loadValues();
+            initialized = true;
             log.info("Loaded {} values from file '{}'", values.size(), filePath);
         } catch (IOException e) {
             throw new IllegalArgumentException("Failed to load values from file '" + filePath + "': " + e.getMessage(), e);
@@ -89,6 +97,7 @@ public class FileParameterSource implements ParameterSource {
 
     /**
      * Loads values from a CSV file.
+     * Limits loading to MAX_LINES to prevent memory issues with large files.
      *
      * @throws IOException if reading the file fails
      */
@@ -100,7 +109,14 @@ public class FileParameterSource implements ParameterSource {
                         .setSkipHeaderRecord(true)
                         .build())) {
 
+            int loadedCount = 0;
             for (CSVRecord record : parser) {
+                if (loadedCount >= MAX_LINES) {
+                    log.warn("CSV file '{}' has more than {} records, truncating. Consider using a smaller file.",
+                            filePath, MAX_LINES);
+                    break;
+                }
+
                 String value;
 
                 if (columnName != null) {
@@ -115,6 +131,7 @@ public class FileParameterSource implements ParameterSource {
 
                 if (value != null && !value.trim().isEmpty()) {
                     values.add(value.trim());
+                    loadedCount++;
                 }
             }
         }
@@ -122,22 +139,33 @@ public class FileParameterSource implements ParameterSource {
 
     /**
      * Loads values from a text file (one value per line).
+     * Limits loading to MAX_LINES to prevent memory issues with large files.
      *
      * @throws IOException if reading the file fails
      */
     private void loadFromTextFile() throws IOException {
         List<String> lines = Files.readAllLines(Paths.get(filePath));
 
+        int loadedCount = 0;
         for (String line : lines) {
+            if (loadedCount >= MAX_LINES) {
+                log.warn("File '{}' has more than {} lines, truncating. Consider using a smaller file.",
+                        filePath, MAX_LINES);
+                break;
+            }
             String trimmed = line.trim();
             if (!trimmed.isEmpty()) {
                 values.add(trimmed);
+                loadedCount++;
             }
         }
     }
 
     @Override
     public String getValue() {
+        if (!initialized) {
+            throw new IllegalStateException("FileParameterSource not initialized: " + filePath);
+        }
         if (values.isEmpty()) {
             throw new IllegalStateException("No values available from file parameter source: " + filePath);
         }

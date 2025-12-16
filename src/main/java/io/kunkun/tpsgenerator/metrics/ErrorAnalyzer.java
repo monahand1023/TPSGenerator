@@ -1,10 +1,11 @@
 package io.kunkun.tpsgenerator.metrics;
 
+import io.kunkun.tpsgenerator.config.Constants;
 import lombok.Data;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.stream.Collectors;
 
@@ -16,12 +17,13 @@ public class ErrorAnalyzer {
     /**
      * Maximum number of error samples to store.
      */
-    private static final int MAX_ERROR_SAMPLES = 100;
+    private static final int MAX_ERROR_SAMPLES = Constants.MAX_ERROR_SAMPLES;
 
     /**
      * Error response samples grouped by status code.
+     * Uses LinkedBlockingDeque for bounded, thread-safe storage.
      */
-    private final Map<Integer, List<String>> errorResponseSamples = new ConcurrentHashMap<>();
+    private final Map<Integer, LinkedBlockingDeque<String>> errorResponseSamples = new ConcurrentHashMap<>();
 
     /**
      * Exception counts by type.
@@ -30,8 +32,9 @@ public class ErrorAnalyzer {
 
     /**
      * Exception samples by type.
+     * Uses LinkedBlockingDeque for bounded, thread-safe storage.
      */
-    private final Map<String, List<ExceptionSample>> exceptionSamples = new ConcurrentHashMap<>();
+    private final Map<String, LinkedBlockingDeque<ExceptionSample>> exceptionSamples = new ConcurrentHashMap<>();
 
     /**
      * Records an error response.
@@ -45,13 +48,11 @@ public class ErrorAnalyzer {
             return;
         }
 
-        List<String> samples = errorResponseSamples.computeIfAbsent(
-                statusCode, k -> new CopyOnWriteArrayList<>());
+        LinkedBlockingDeque<String> samples = errorResponseSamples.computeIfAbsent(
+                statusCode, k -> new LinkedBlockingDeque<>(MAX_ERROR_SAMPLES));
 
-        // Add sample if we haven't reached the limit
-        if (samples.size() < MAX_ERROR_SAMPLES) {
-            samples.add(responseBody != null ? responseBody : "");
-        }
+        // Offer to the bounded deque (will reject if full, which is the desired behavior)
+        samples.offer(responseBody != null ? responseBody : "");
     }
 
     /**
@@ -65,17 +66,16 @@ public class ErrorAnalyzer {
         // Increment counter
         exceptionCounts.computeIfAbsent(exceptionType, k -> new LongAdder()).increment();
 
-        // Add sample
-        List<ExceptionSample> samples = exceptionSamples.computeIfAbsent(
-                exceptionType, k -> new CopyOnWriteArrayList<>());
+        // Add sample to bounded deque
+        LinkedBlockingDeque<ExceptionSample> samples = exceptionSamples.computeIfAbsent(
+                exceptionType, k -> new LinkedBlockingDeque<>(MAX_ERROR_SAMPLES));
 
-        if (samples.size() < MAX_ERROR_SAMPLES) {
-            samples.add(new ExceptionSample(
-                    System.currentTimeMillis(),
-                    e.getMessage(),
-                    getStackTraceAsString(e)
-            ));
-        }
+        // Offer to the bounded deque (will reject if full)
+        samples.offer(new ExceptionSample(
+                System.currentTimeMillis(),
+                e.getMessage(),
+                getStackTraceAsString(e)
+        ));
     }
 
     /**
@@ -86,7 +86,7 @@ public class ErrorAnalyzer {
     public Map<Integer, List<String>> getErrorResponseSamples() {
         Map<Integer, List<String>> result = new HashMap<>();
 
-        for (Map.Entry<Integer, List<String>> entry : errorResponseSamples.entrySet()) {
+        for (Map.Entry<Integer, LinkedBlockingDeque<String>> entry : errorResponseSamples.entrySet()) {
             result.put(entry.getKey(), new ArrayList<>(entry.getValue()));
         }
 
@@ -111,7 +111,7 @@ public class ErrorAnalyzer {
     public Map<String, List<ExceptionSample>> getExceptionSamples() {
         Map<String, List<ExceptionSample>> result = new HashMap<>();
 
-        for (Map.Entry<String, List<ExceptionSample>> entry : exceptionSamples.entrySet()) {
+        for (Map.Entry<String, LinkedBlockingDeque<ExceptionSample>> entry : exceptionSamples.entrySet()) {
             result.put(entry.getKey(), new ArrayList<>(entry.getValue()));
         }
 

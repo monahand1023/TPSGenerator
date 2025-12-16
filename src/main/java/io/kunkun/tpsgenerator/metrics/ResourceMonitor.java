@@ -1,5 +1,6 @@
 package io.kunkun.tpsgenerator.metrics;
 
+import io.kunkun.tpsgenerator.config.Constants;
 import io.kunkun.tpsgenerator.model.ResourceSnapshot;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -27,9 +28,8 @@ public class ResourceMonitor implements Closeable {
 
     /**
      * Maximum number of snapshots to retain in memory.
-     * With 5-second intervals, this allows ~8.3 hours of data.
      */
-    private static final int MAX_SNAPSHOTS = 6000;
+    private static final int MAX_SNAPSHOTS = Constants.MAX_RESOURCE_SNAPSHOTS;
 
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread thread = new Thread(r);

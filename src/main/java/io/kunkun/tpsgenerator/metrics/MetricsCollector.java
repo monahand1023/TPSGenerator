@@ -1,7 +1,6 @@
 package io.kunkun.tpsgenerator.metrics;
 
 import io.kunkun.tpsgenerator.config.TestConfig;
-import io.kunkun.tpsgenerator.model.ResourceSnapshot;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -9,18 +8,14 @@ import java.io.Closeable;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.LongAdder;
 
 /**
  * Collects and aggregates metrics for a load test.
+ * Uses composition to delegate to specialized metric collectors.
  * Implements Closeable for proper resource cleanup.
  */
 @Slf4j
@@ -40,15 +35,16 @@ public class MetricsCollector implements Closeable {
     @Getter
     private final ResourceMonitor resourceMonitor;
 
+    @Getter
+    private final RequestTracker requestTracker = new RequestTracker();
+
+    private final TpsCalculator tpsCalculator = new TpsCalculator();
+
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
     private final AtomicBoolean running = new AtomicBoolean(false);
-    private final Map<Long, RequestInfo> activeRequests = new ConcurrentHashMap<>();
 
     @Getter
     private volatile long startTime;
-
-    private final LongAdder requestsLastSecond = new LongAdder();
-    private final AtomicLong currentTps = new AtomicLong(0);
 
     /**
      * Creates a new MetricsCollector.
@@ -132,11 +128,7 @@ public class MetricsCollector implements Closeable {
      * @param request the HTTP request
      */
     public void recordRequestStart(long requestId, HttpRequest request) {
-        RequestInfo info = new RequestInfo();
-        info.startTime = System.currentTimeMillis();
-        info.request = request;
-
-        activeRequests.put(requestId, info);
+        requestTracker.startTracking(requestId, request);
         testMetrics.incrementTotalRequests();
     }
 
@@ -148,8 +140,8 @@ public class MetricsCollector implements Closeable {
      * @param responseTime the response time in milliseconds
      */
     public void recordResponse(long requestId, HttpResponse<String> response, long responseTime) {
-        // Get request info
-        RequestInfo info = activeRequests.remove(requestId);
+        // Stop tracking the request
+        RequestTracker.RequestInfo info = requestTracker.stopTracking(requestId);
 
         if (info != null) {
             // Record response time
@@ -173,7 +165,7 @@ public class MetricsCollector implements Closeable {
         }
 
         // Increment requests counter for TPS calculation
-        requestsLastSecond.increment();
+        tpsCalculator.incrementRequestCount();
     }
 
     /**
@@ -183,12 +175,12 @@ public class MetricsCollector implements Closeable {
      * @param e the exception
      */
     public void recordError(long requestId, Exception e) {
-        // Get request info
-        RequestInfo info = activeRequests.remove(requestId);
+        // Stop tracking the request
+        RequestTracker.RequestInfo info = requestTracker.stopTracking(requestId);
 
         if (info != null) {
             // Calculate response time
-            long responseTime = System.currentTimeMillis() - info.startTime;
+            long responseTime = System.currentTimeMillis() - info.getStartTime();
             testMetrics.recordResponseTime(responseTime);
         }
 
@@ -197,7 +189,7 @@ public class MetricsCollector implements Closeable {
         errorAnalyzer.recordException(e);
 
         // Increment requests counter for TPS calculation
-        requestsLastSecond.increment();
+        tpsCalculator.incrementRequestCount();
     }
 
     /**
@@ -207,8 +199,8 @@ public class MetricsCollector implements Closeable {
      * @param responseTime the response time in milliseconds
      */
     public void recordTimeout(long requestId, long responseTime) {
-        // Remove request info
-        activeRequests.remove(requestId);
+        // Stop tracking the request
+        requestTracker.stopTracking(requestId);
 
         // Record response time
         testMetrics.recordResponseTime(responseTime);
@@ -218,7 +210,7 @@ public class MetricsCollector implements Closeable {
         testMetrics.incrementFailureCount();
 
         // Increment requests counter for TPS calculation
-        requestsLastSecond.increment();
+        tpsCalculator.incrementRequestCount();
     }
 
     /**
@@ -245,7 +237,7 @@ public class MetricsCollector implements Closeable {
      * @return the current TPS
      */
     public double getCurrentTps() {
-        return currentTps.get();
+        return tpsCalculator.getCurrentTps();
     }
 
     /**
@@ -254,8 +246,7 @@ public class MetricsCollector implements Closeable {
      */
     private void updateTps() {
         try {
-            long tps = requestsLastSecond.sumThenReset();
-            currentTps.set(tps);
+            long tps = tpsCalculator.updateTps();
             testMetrics.recordTps(tps);
 
             // Update histogram snapshots for lock-free reading
@@ -284,13 +275,5 @@ public class MetricsCollector implements Closeable {
             testMetrics.setMaxMemoryUsage(resourceMonitor.getMaxMemoryUsage());
             testMetrics.setResourceSnapshots(resourceMonitor.getSnapshots());
         }
-    }
-
-    /**
-     * Information about an active request.
-     */
-    private static class RequestInfo {
-        HttpRequest request;
-        long startTime;
     }
 }

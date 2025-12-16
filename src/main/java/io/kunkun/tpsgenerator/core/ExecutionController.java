@@ -18,9 +18,10 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * Controls the execution of a load test.
  * This class orchestrates the test execution, manages threads, and controls the traffic rate.
+ * Implements Closeable for proper resource cleanup.
  */
 @Slf4j
-public class ExecutionController {
+public class ExecutionController implements java.io.Closeable {
     private final TestConfig config;
     private final MetricsCollector metricsCollector;
     private final ExecutorService executor;
@@ -33,6 +34,7 @@ public class ExecutionController {
     private final AtomicBoolean testRunning = new AtomicBoolean(false);
     private final AtomicLong requestCounter = new AtomicLong(0);
     private final CountDownLatch completionLatch = new CountDownLatch(1);
+    private final Thread shutdownHook;
 
     /**
      * Creates a new ExecutionController.
@@ -90,6 +92,10 @@ public class ExecutionController {
         } else {
             this.circuitBreaker = null;
         }
+
+        // Register shutdown hook for cleanup
+        this.shutdownHook = new Thread(this::shutdownResources, "tps-shutdown-hook");
+        Runtime.getRuntime().addShutdownHook(shutdownHook);
 
         log.info("Initialized execution controller with traffic pattern: {}", trafficPattern);
     }
@@ -298,6 +304,58 @@ public class ExecutionController {
             scheduler.shutdownNow();
             testRunning.set(false);
             completionLatch.countDown();
+        }
+    }
+
+    /**
+     * Closes this controller and releases all resources.
+     * Removes the shutdown hook if not called from the hook itself.
+     */
+    @Override
+    public void close() {
+        stop();
+        shutdownResources();
+
+        // Remove shutdown hook if not currently executing it
+        try {
+            if (!Thread.currentThread().equals(shutdownHook)) {
+                Runtime.getRuntime().removeShutdownHook(shutdownHook);
+            }
+        } catch (IllegalStateException e) {
+            // JVM is already shutting down, ignore
+        }
+    }
+
+    /**
+     * Shuts down executor resources gracefully.
+     */
+    private void shutdownResources() {
+        log.debug("Shutting down executor resources");
+
+        // Shutdown executor if not already shutdown
+        if (!executor.isShutdown()) {
+            executor.shutdown();
+            try {
+                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        // Shutdown scheduler if not already shutdown
+        if (!scheduler.isShutdown()) {
+            scheduler.shutdown();
+            try {
+                if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
+                    scheduler.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                scheduler.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
         }
     }
 }

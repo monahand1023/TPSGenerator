@@ -139,6 +139,13 @@ public class CSVExporter {
             return;
         }
 
+        // Create a defensive copy to prevent concurrent modification issues
+        List<ResourceSnapshot> snapshotsCopy = new java.util.ArrayList<>(snapshots);
+        if (snapshotsCopy.isEmpty()) {
+            log.warn("No resource snapshots to export after copy");
+            return;
+        }
+
         try (FileWriter writer = new FileWriter(outputFile)) {
             CSVPrinter printer = CSVFormat.DEFAULT
                     .withHeader(
@@ -156,9 +163,9 @@ public class CSVExporter {
                     )
                     .print(writer);
 
-            long startTime = snapshots.get(0).getTimestampMs();
+            long startTime = snapshotsCopy.get(0).getTimestampMs();
 
-            for (ResourceSnapshot snapshot : snapshots) {
+            for (ResourceSnapshot snapshot : snapshotsCopy) {
                 printer.printRecord(
                         formatTimestamp(snapshot.getTimestampMs()),
                         snapshot.getTimestampMs() - startTime,

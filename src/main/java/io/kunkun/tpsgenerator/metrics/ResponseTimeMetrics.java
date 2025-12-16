@@ -1,5 +1,6 @@
 package io.kunkun.tpsgenerator.metrics;
 
+import io.kunkun.tpsgenerator.config.Constants;
 import org.HdrHistogram.Histogram;
 import org.HdrHistogram.Recorder;
 
@@ -13,7 +14,7 @@ public class ResponseTimeMetrics {
     /**
      * Default maximum trackable value (1 hour in milliseconds).
      */
-    private static final long DEFAULT_MAX_VALUE = 3600000L;
+    private static final long DEFAULT_MAX_VALUE = Constants.HISTOGRAM_MAX_VALUE_MS;
 
     /**
      * Response time recorder for lock-free recording.
@@ -49,7 +50,7 @@ public class ResponseTimeMetrics {
      * Creates a new ResponseTimeMetrics with default histogram configuration.
      */
     public ResponseTimeMetrics() {
-        this(3);
+        this(Constants.HISTOGRAM_PRECISION);
     }
 
     /**

@@ -1,7 +1,9 @@
 package io.kunkun.tpsgenerator.core;
 
 import io.kunkun.tpsgenerator.metrics.MetricsCollector;
+import io.kunkun.tpsgenerator.request.RequestGenerationException;
 import io.kunkun.tpsgenerator.request.RequestGenerator;
+import io.kunkun.tpsgenerator.request.ResponseValidator;
 import com.google.common.util.concurrent.RateLimiter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -24,6 +26,7 @@ public class RequestExecutor {
     private final RateLimiter rateLimiter;
     private final MetricsCollector metricsCollector;
     private final CircuitBreaker circuitBreaker;
+    private final ResponseValidator responseValidator;
 
     /**
      * Creates a new RequestExecutor using the builder.
@@ -36,6 +39,7 @@ public class RequestExecutor {
         this.rateLimiter = Objects.requireNonNull(builder.rateLimiter, "rateLimiter is required");
         this.metricsCollector = Objects.requireNonNull(builder.metricsCollector, "metricsCollector is required");
         this.circuitBreaker = builder.circuitBreaker; // Optional, can be null
+        this.responseValidator = builder.responseValidator; // Optional, can be null
     }
 
     /**
@@ -56,6 +60,7 @@ public class RequestExecutor {
         private RateLimiter rateLimiter;
         private MetricsCollector metricsCollector;
         private CircuitBreaker circuitBreaker;
+        private ResponseValidator responseValidator;
 
         /**
          * Sets the HTTP client.
@@ -113,6 +118,17 @@ public class RequestExecutor {
         }
 
         /**
+         * Sets the response validator (optional).
+         *
+         * @param responseValidator the response validator, or null to skip validation
+         * @return this builder
+         */
+        public Builder responseValidator(ResponseValidator responseValidator) {
+            this.responseValidator = responseValidator;
+            return this;
+        }
+
+        /**
          * Builds the RequestExecutor.
          *
          * @return the RequestExecutor
@@ -145,9 +161,11 @@ public class RequestExecutor {
             }
 
             // Generate request
-            HttpRequest request = requestGenerator.generateRequest(requestId, elapsedTimeMs);
-            if (request == null) {
-                log.warn("Failed to generate request {}, skipping", requestId);
+            HttpRequest request;
+            try {
+                request = requestGenerator.generateRequest(requestId, elapsedTimeMs);
+            } catch (RequestGenerationException e) {
+                log.warn("Failed to generate request {}: {}", requestId, e.getMessage());
                 metricsCollector.recordSkippedRequest(requestId);
                 return;
             }
@@ -172,8 +190,19 @@ public class RequestExecutor {
                 long endTime = System.currentTimeMillis();
                 long responseTime = endTime - startTime;
 
-                // Record successful response
+                // Determine success based on status code
                 boolean isSuccess = response.statusCode() >= 200 && response.statusCode() < 300;
+
+                // Apply response validation if configured
+                if (isSuccess && responseValidator != null) {
+                    ResponseValidator.ValidationResult validationResult = responseValidator.validate(response);
+                    if (!validationResult.isValid()) {
+                        isSuccess = false;
+                        log.debug("Request {} failed validation: {}", requestId, validationResult.getFailureDescription());
+                    }
+                }
+
+                // Record response
                 metricsCollector.recordResponse(requestId, response, responseTime);
 
                 // Update circuit breaker
