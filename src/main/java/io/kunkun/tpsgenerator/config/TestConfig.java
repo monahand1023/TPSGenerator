@@ -39,8 +39,10 @@ public class TestConfig {
             throw new IllegalArgumentException("Traffic pattern type is required");
         }
 
-        if (trafficPattern.getTargetTps() <= 0) {
-            throw new IllegalArgumentException("Target TPS must be positive");
+        if (!"custom".equalsIgnoreCase(trafficPattern.getType())
+                && trafficPattern.getTargetTps() <= 0) {
+            throw new IllegalArgumentException(
+                    "Target TPS must be positive for pattern type: " + trafficPattern.getType());
         }
 
         if (threadPool == null) {

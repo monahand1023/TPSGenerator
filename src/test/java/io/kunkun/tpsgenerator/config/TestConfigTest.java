@@ -213,4 +213,31 @@ class TestConfigTest {
         );
         assertTrue(exception.getMessage().contains("request template"));
     }
+
+    @Test
+    @DisplayName("Custom pattern with targetTps=0 should pass validation")
+    void customPatternWithZeroTargetTpsShouldPassValidation() {
+        TestConfig.TrafficConfig customTraffic = new TestConfig.TrafficConfig();
+        customTraffic.setType("custom");
+        customTraffic.setTargetTps(0); // intentionally unset for custom patterns
+        customTraffic.setPatternFile("patterns/my-pattern.csv");
+        config.setTrafficPattern(customTraffic);
+
+        assertDoesNotThrow(() -> config.validate(),
+                "Custom pattern type should not require targetTps > 0");
+    }
+
+    @Test
+    @DisplayName("Non-custom pattern with targetTps=0 should fail validation")
+    void nonCustomPatternWithZeroTargetTpsShouldFailValidation() {
+        config.getTrafficPattern().setType("stable");
+        config.getTrafficPattern().setTargetTps(0);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> config.validate()
+        );
+        assertTrue(exception.getMessage().contains("Target TPS must be positive"),
+                "Expected 'Target TPS must be positive' in: " + exception.getMessage());
+    }
 }

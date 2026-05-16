@@ -1,7 +1,7 @@
 # TPS Generator
 
 When I was working at Amazon, we had a tool called "TPS Generator" that we would use to simulate traffic and generate traffic loads. I know that you can do a very quick solution using a tool like Postman (https://blog.postman.com/postman-api-performance-testing/), but if you need something a bit more customizable and flexible, you may need to build out your own solution.
-My solution here is a robust, flexible, and feature-rich load testing tool for generating controlled HTTP traffic patterns to test API performance and reliability. If you also need to use a quick scaffolding to mock a service, be sure to check out my TPSGenerator-Service to quickly do this: https://github.com/monahand1023/TPSGenerator-Server
+My solution here is a robust, flexible, and feature-rich load testing tool for generating controlled HTTP traffic patterns to test API performance and reliability. If you also need to use a quick scaffolding to mock a service, be sure to check out my TPSGenerator-Server to quickly do this: https://github.com/monahand1023/TPSGenerator-Server
 
 ## Table of Contents
 
@@ -487,6 +487,39 @@ Max Memory Usage: 96.34 MB
 
 Process finished with exit code 0
 ```
+
+## Configuration Validation
+
+At startup, `TestConfig.validate()` is called immediately after loading the configuration file. If the configuration is invalid the tool prints a clear error message and exits with code 1 before starting any test traffic.
+
+The following conditions are caught:
+
+| Check | Error message |
+|---|---|
+| `name` is null or blank | `Test name cannot be null or empty` |
+| `testDuration` is null, zero, or negative | `Test duration must be a positive duration` |
+| `trafficPattern` is null | `Traffic pattern configuration is required` |
+| `trafficPattern.type` is null/blank | `Traffic pattern type is required` |
+| `targetTps <= 0` for any non-`custom` pattern | `Target TPS must be positive for pattern type: <type>` |
+| `threadPool` is null | `Thread pool configuration is required` |
+| `threadPool.coreSize <= 0` | `Thread pool core size must be positive` |
+| `threadPool.maxSize < coreSize` | `Thread pool max size must be >= core size` |
+| No request templates | `At least one request template is required` |
+
+> **Note:** The `custom` traffic pattern does not require `targetTps` to be set — its TPS values come from the `patternFile`.
+
+## Dashboard Integration Backend API
+
+The `DashboardClient` expects the backend server (e.g. TPSGenerator-Server) to expose these endpoints:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/tests/register` | Register a new test run. Body: `{testId, testName, targetServiceUrl, startTime, testDuration}` |
+| `POST` | `/api/metrics/update` | Send periodic metrics update. Body: `{testId, timestamp, summary, statusCodes, resources}` |
+| `POST` | `/api/tests/finish` | Mark test as finished. Body: `{testId, endTime}` |
+| `POST` | `/api/tests/result` | Send final test result. Body: full metrics payload |
+
+All requests include an `X-API-Key` header if `metrics.dashboard.apiKey` is set in the config.
 
 ## Testing
 

@@ -1,5 +1,6 @@
 package io.kunkun.tpsgenerator.core;
 
+import io.kunkun.tpsgenerator.config.Constants;
 import io.kunkun.tpsgenerator.config.TestConfig;
 import io.kunkun.tpsgenerator.factory.TrafficPatternFactory;
 import io.kunkun.tpsgenerator.metrics.MetricsCollector;
@@ -37,14 +38,30 @@ public class ExecutionController implements java.io.Closeable {
     private final Thread shutdownHook;
 
     /**
-     * Creates a new ExecutionController.
+     * Creates a new ExecutionController using its own HttpClient.
      *
      * @param config the test configuration
      * @param metricsCollector the metrics collector for recording test results
      */
     public ExecutionController(TestConfig config, MetricsCollector metricsCollector) {
+        this(config, metricsCollector, HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(Constants.DEFAULT_CONNECT_TIMEOUT_SECONDS))
+                .version(HttpClient.Version.HTTP_2)
+                .build());
+    }
+
+    /**
+     * Creates a new ExecutionController with a shared HttpClient.
+     * Prefer this constructor when sharing a client with other components (e.g. DashboardClient).
+     *
+     * @param config the test configuration
+     * @param metricsCollector the metrics collector for recording test results
+     * @param httpClient the shared HttpClient to use
+     */
+    public ExecutionController(TestConfig config, MetricsCollector metricsCollector, HttpClient httpClient) {
         this.config = config;
         this.metricsCollector = metricsCollector;
+        this.httpClient = httpClient;
 
         // Create traffic pattern using factory
         this.trafficPattern = TrafficPatternFactory.create(config.getTrafficPattern());
@@ -74,11 +91,6 @@ public class ExecutionController implements java.io.Closeable {
 
         // Initialize scheduler for rate updates
         this.scheduler = Executors.newScheduledThreadPool(1);
-
-        // Initialize HTTP client
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
-                .build();
 
         // Initialize request generator
         this.requestGenerator = new RequestGenerator(config);
@@ -224,7 +236,7 @@ public class ExecutionController implements java.io.Closeable {
      */
     private void shutdownExecutor() throws InterruptedException {
         executor.shutdown();
-        executor.awaitTermination(30, TimeUnit.SECONDS);
+        executor.awaitTermination(Constants.EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 
     /**
@@ -336,7 +348,7 @@ public class ExecutionController implements java.io.Closeable {
         if (!executor.isShutdown()) {
             executor.shutdown();
             try {
-                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                if (!executor.awaitTermination(Constants.GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                     executor.shutdownNow();
                 }
             } catch (InterruptedException e) {
@@ -349,7 +361,7 @@ public class ExecutionController implements java.io.Closeable {
         if (!scheduler.isShutdown()) {
             scheduler.shutdown();
             try {
-                if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
+                if (!scheduler.awaitTermination(Constants.GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                     scheduler.shutdownNow();
                 }
             } catch (InterruptedException e) {

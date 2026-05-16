@@ -145,8 +145,8 @@ public class CircuitBreaker {
     private void openCircuit(double errorRate) {
         if (isOpen.compareAndSet(false, true)) {
             openTime = Instant.now();
-            log.warn("Circuit breaker opened due to error rate: {:.2f} (threshold: {:.2f})",
-                    errorRate, errorThreshold);
+            log.warn("Circuit breaker opened due to error rate: {} (threshold: {})",
+                    String.format("%.2f", errorRate), String.format("%.2f", errorThreshold));
         }
     }
 

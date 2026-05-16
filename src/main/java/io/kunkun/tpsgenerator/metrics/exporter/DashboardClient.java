@@ -35,19 +35,29 @@ public class DashboardClient {
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     /**
-     * Creates a new DashboardClient.
+     * Creates a new DashboardClient using its own HttpClient.
      *
      * @param config the test configuration
      * @param testId the test ID
      */
     public DashboardClient(TestConfig config, String testId) {
+        this(config, testId, HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(5))
+                .build());
+    }
+
+    /**
+     * Creates a new DashboardClient with a shared HttpClient.
+     * Prefer this constructor to avoid creating redundant HttpClient instances.
+     *
+     * @param config the test configuration
+     * @param testId the test ID
+     * @param httpClient the shared HttpClient to use
+     */
+    public DashboardClient(TestConfig config, String testId, HttpClient httpClient) {
         this.config = config;
         this.testId = testId;
-
-        // Initialize HTTP client
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(5))
-                .build();
+        this.httpClient = httpClient;
 
         this.objectMapper = new ObjectMapper();
 

@@ -7,6 +7,8 @@ import java.net.URI;
 import java.net.http.HttpRequest;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Template for generating HTTP requests.
@@ -15,6 +17,11 @@ import java.util.Map;
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class RequestTemplate {
+
+    /**
+     * Compiled pattern matching ${paramName} placeholders (single-pass substitution).
+     */
+    private static final Pattern PARAM_PATTERN = Pattern.compile("\\$\\{([^}]+)\\}");
 
     /**
      * The name of the template.
@@ -99,7 +106,8 @@ public class RequestTemplate {
     }
 
     /**
-     * Replaces parameter placeholders in a template string.
+     * Replaces parameter placeholders in a template string using single-pass regex substitution.
+     * Placeholders use the format ${paramName}. Unknown placeholders are left unchanged.
      *
      * @param template the template string
      * @param parameters the parameter values
@@ -110,12 +118,14 @@ public class RequestTemplate {
             return "";
         }
 
-        String result = template;
-        for (Map.Entry<String, String> entry : parameters.entrySet()) {
-            String placeholder = "${" + entry.getKey() + "}";
-            result = result.replace(placeholder, entry.getValue());
+        Matcher matcher = PARAM_PATTERN.matcher(template);
+        StringBuffer result = new StringBuffer();
+        while (matcher.find()) {
+            String key = matcher.group(1);
+            String value = parameters.getOrDefault(key, matcher.group(0)); // keep original if not found
+            matcher.appendReplacement(result, Matcher.quoteReplacement(value));
         }
-
-        return result;
+        matcher.appendTail(result);
+        return result.toString();
     }
 }

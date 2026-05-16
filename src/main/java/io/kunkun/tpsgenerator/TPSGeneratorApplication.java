@@ -1,5 +1,6 @@
 package io.kunkun.tpsgenerator;
 
+import io.kunkun.tpsgenerator.config.Constants;
 import io.kunkun.tpsgenerator.config.TestConfig;
 import io.kunkun.tpsgenerator.core.ExecutionController;
 import io.kunkun.tpsgenerator.metrics.MetricsCollector;
@@ -11,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.http.HttpClient;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -51,11 +53,26 @@ public class TPSGeneratorApplication {
             TestConfig config = loadConfig(configFile);
             log.info("Loaded test configuration: {}", config.getName());
 
+            // Validate configuration
+            try {
+                config.validate();
+            } catch (IllegalArgumentException e) {
+                System.err.println("Invalid configuration: " + e.getMessage());
+                System.err.println("Please check your test configuration file and try again.");
+                System.exit(1);
+            }
+
+            // Create a single shared HTTP client for all components
+            HttpClient sharedHttpClient = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(Constants.DEFAULT_CONNECT_TIMEOUT_SECONDS))
+                    .version(HttpClient.Version.HTTP_2)
+                    .build();
+
             // Initialize metrics collector
             MetricsCollector metricsCollector = new MetricsCollector(config);
 
-            // Initialize execution controller
-            ExecutionController controller = new ExecutionController(config, metricsCollector);
+            // Initialize execution controller (passes shared client)
+            ExecutionController controller = new ExecutionController(config, metricsCollector, sharedHttpClient);
 
             // Run the test
             log.info("Starting test execution...");
