@@ -91,16 +91,20 @@ public class ResponseTimeMetrics {
      * Updates the histogram snapshots with the latest recorded values.
      * Should be called periodically (e.g., every second) to make recorded
      * values available for reading. This method is thread-safe.
+     *
+     * <p>Uses the no-arg {@link Recorder#getIntervalHistogram()} form, which is
+     * compatible with HdrHistogram 2.2.x (the recycle-histogram overload requires
+     * the passed histogram to have been originally obtained from the same Recorder).
      */
     public void updateSnapshots() {
-        // Get interval histogram and add to accumulated
-        Histogram responseInterval = responseTimeRecorder.getIntervalHistogram(responseTimeSnapshot);
+        // Get interval histogram (allocates a new one) and add to accumulated
+        Histogram responseInterval = responseTimeRecorder.getIntervalHistogram();
         synchronized (responseTimeAccumulated) {
             responseTimeAccumulated.add(responseInterval);
             responseTimeSnapshot = responseTimeAccumulated.copy();
         }
 
-        Histogram waitInterval = rateLimiterWaitRecorder.getIntervalHistogram(rateLimiterWaitSnapshot);
+        Histogram waitInterval = rateLimiterWaitRecorder.getIntervalHistogram();
         synchronized (rateLimiterWaitAccumulated) {
             rateLimiterWaitAccumulated.add(waitInterval);
             rateLimiterWaitSnapshot = rateLimiterWaitAccumulated.copy();

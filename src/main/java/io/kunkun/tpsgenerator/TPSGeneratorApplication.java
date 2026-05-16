@@ -3,6 +3,7 @@ package io.kunkun.tpsgenerator;
 import io.kunkun.tpsgenerator.config.Constants;
 import io.kunkun.tpsgenerator.config.TestConfig;
 import io.kunkun.tpsgenerator.core.ExecutionController;
+import io.kunkun.tpsgenerator.metrics.LatencyStats;
 import io.kunkun.tpsgenerator.metrics.MetricsCollector;
 import io.kunkun.tpsgenerator.metrics.exporter.CSVExporter;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -82,6 +83,9 @@ public class TPSGeneratorApplication {
             Duration testDuration = Duration.between(startTime, endTime);
             log.info("Test completed in {}", formatDuration(testDuration));
 
+            // Capture latency percentiles before closing the controller
+            LatencyStats latencyStats = controller.getLatencyPercentiles();
+
             // Export results
             String timestamp = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")
                     .withZone(ZoneId.systemDefault())
@@ -94,7 +98,7 @@ public class TPSGeneratorApplication {
             log.info("Results exported to {}", resultsFile);
 
             // Print summary
-            printSummary(metricsCollector, testDuration);
+            printSummary(metricsCollector, testDuration, latencyStats);
 
         } catch (Exception e) {
             log.error("Error executing test", e);
@@ -123,7 +127,8 @@ public class TPSGeneratorApplication {
                 hours, minutes % 60, seconds % 60);
     }
 
-    private static void printSummary(MetricsCollector metrics, Duration testDuration) {
+    private static void printSummary(MetricsCollector metrics, Duration testDuration,
+                                      LatencyStats latencyStats) {
         System.out.println("\n=== Test Summary ===");
         System.out.println("Duration: " + formatDuration(testDuration));
         System.out.println("Total Requests: " + metrics.getTestMetrics().getTotalRequests());
@@ -139,6 +144,12 @@ public class TPSGeneratorApplication {
                 String.format("%.2f%%", metrics.getTestMetrics().getMaxCpuUsage()));
         System.out.println("Max Memory Usage: " +
                 String.format("%.2f MB", metrics.getTestMetrics().getMaxMemoryUsage() / (1024.0 * 1024.0)));
+        System.out.println("--- Latency Percentiles (HDR, end-to-end) ---");
+        System.out.println("P50 Latency: " + String.format("%.3f ms", latencyStats.getP50Ms()));
+        System.out.println("P95 Latency: " + String.format("%.3f ms", latencyStats.getP95Ms()));
+        System.out.println("P99 Latency: " + String.format("%.3f ms", latencyStats.getP99Ms()));
+        System.out.println("Max Latency: " + String.format("%.3f ms", latencyStats.getMaxMs()));
+        System.out.println("Mean Latency: " + String.format("%.3f ms", latencyStats.getMeanMs()));
         System.out.println("==================");
     }
 }

@@ -2,6 +2,7 @@ package io.kunkun.tpsgenerator.metrics.exporter;
 
 import io.kunkun.tpsgenerator.model.ResourceSnapshot;
 import io.kunkun.tpsgenerator.metrics.TestMetrics;
+import io.kunkun.tpsgenerator.metrics.TpsMetrics;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
@@ -113,8 +114,8 @@ public class CSVExporter {
                     .withHeader("Timestamp", "Elapsed (ms)", "TPS")
                     .print(writer);
 
-            List<TestMetrics.TpsSample> samples = metrics.getTpsSamples();
-            for (TestMetrics.TpsSample sample : samples) {
+            List<TpsMetrics.TpsSample> samples = metrics.getTpsSamples();
+            for (TpsMetrics.TpsSample sample : samples) {
                 printer.printRecord(
                         formatTimestamp(sample.getTimestamp()),
                         sample.getTimestamp() - metrics.getStartTime(),

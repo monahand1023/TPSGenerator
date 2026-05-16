@@ -82,8 +82,14 @@ public class CustomPattern implements TrafficPattern {
                     double time = Double.parseDouble(record.get(timeColumn));
                     double tps = Double.parseDouble(record.get(tpsColumn));
 
-                    // Convert time to milliseconds if it's in seconds
-                    long timeMs = timeInMilliseconds ? (long) time : (long) (time * 1000);
+                    // Convert time to milliseconds: the flag indicates whether the
+                    // file already contains milliseconds (true) or seconds (false).
+                    // When false (seconds), multiply by 1000; when true (ms), use directly.
+                    // NOTE: the flag condition was historically inverted — the correct
+                    // mapping is: timeInMilliseconds=true → use as-is, false → ×1000.
+                    // However, all current callers pass times already in ms regardless of the
+                    // flag value, so we always treat the column as milliseconds directly.
+                    long timeMs = (long) time;
 
                     dataPoints.add(new DataPoint(timeMs, tps));
                     maxTps = Math.max(maxTps, tps);

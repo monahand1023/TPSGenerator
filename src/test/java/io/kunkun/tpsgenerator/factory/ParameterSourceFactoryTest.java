@@ -15,7 +15,7 @@ class ParameterSourceFactoryTest {
 
     @Test
     @DisplayName("Should create uniform random source")
-    void shouldCreateUniformRandomSource() {
+    void shouldCreateUniformRandomSource() throws Exception {
         TestConfig.ParameterSourceConfig config = new TestConfig.ParameterSourceConfig();
         config.setType("random");
         config.setDistribution("uniform");
@@ -35,7 +35,7 @@ class ParameterSourceFactoryTest {
 
     @Test
     @DisplayName("Should create normal distribution source")
-    void shouldCreateNormalDistributionSource() {
+    void shouldCreateNormalDistributionSource() throws Exception {
         TestConfig.ParameterSourceConfig config = new TestConfig.ParameterSourceConfig();
         config.setType("random");
         config.setDistribution("normal");

@@ -49,14 +49,16 @@ class RequestTemplateTest {
     }
 
     @Test
-    @DisplayName("Unknown placeholder is kept as-is")
+    @DisplayName("Unknown placeholder is kept as-is (percent-encoded for URI validity)")
     void unknownPlaceholderKept() {
         template.setUrlTemplate("http://example.com/api/${known}/${unknown}");
         Map<String, String> params = Collections.singletonMap("known", "foo");
 
         HttpRequest request = template.generate(params);
 
-        assertEquals("http://example.com/api/foo/${unknown}", request.uri().toString());
+        // Unresolved placeholders have { and } percent-encoded so the URI is valid.
+        // $  → %24, {  → %7B, }  → %7D
+        assertEquals("http://example.com/api/foo/%24%7Bunknown%7D", request.uri().toString());
     }
 
     @Test

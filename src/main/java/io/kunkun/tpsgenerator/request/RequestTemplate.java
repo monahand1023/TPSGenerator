@@ -62,8 +62,9 @@ public class RequestTemplate {
      * @return the HTTP request
      */
     public HttpRequest generate(Map<String, String> parameters) {
-        // Replace parameters in URL
-        String url = replaceParameters(urlTemplate, parameters);
+        // Replace parameters in URL; percent-encode any remaining ${...} placeholders
+        // so that URI.create() does not throw on illegal characters ({ and }).
+        String url = encodeUnresolvedPlaceholders(replaceParameters(urlTemplate, parameters));
 
         // Build request
         HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
@@ -103,6 +104,21 @@ public class RequestTemplate {
         }
 
         return requestBuilder.build();
+    }
+
+    /**
+     * Percent-encodes any remaining {@code ${...}} placeholders in a URL string so that
+     * {@link URI#create(String)} does not throw on the illegal characters {@code {} and {@code }}.
+     * {@code $} → {@code %24}, {@code {} → {@code %7B}, {@code }} → {@code %7D}.
+     *
+     * @param url the URL that may contain unresolved placeholders
+     * @return the URL with any leftover placeholders percent-encoded
+     */
+    private String encodeUnresolvedPlaceholders(String url) {
+        if (url == null || !url.contains("${")) {
+            return url;
+        }
+        return url.replace("$", "%24").replace("{", "%7B").replace("}", "%7D");
     }
 
     /**

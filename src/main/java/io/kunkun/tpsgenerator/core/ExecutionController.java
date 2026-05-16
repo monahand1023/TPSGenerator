@@ -3,12 +3,15 @@ package io.kunkun.tpsgenerator.core;
 import io.kunkun.tpsgenerator.config.Constants;
 import io.kunkun.tpsgenerator.config.TestConfig;
 import io.kunkun.tpsgenerator.factory.TrafficPatternFactory;
+import io.kunkun.tpsgenerator.metrics.LatencyStats;
 import io.kunkun.tpsgenerator.metrics.MetricsCollector;
 import io.kunkun.tpsgenerator.model.TestResult;
 import io.kunkun.tpsgenerator.request.RequestGenerator;
 import io.kunkun.tpsgenerator.traffic.TrafficPattern;
 import com.google.common.util.concurrent.RateLimiter;
 import lombok.extern.slf4j.Slf4j;
+import org.HdrHistogram.Histogram;
+import org.HdrHistogram.Recorder;
 
 import java.net.http.HttpClient;
 import java.time.Duration;
@@ -36,6 +39,15 @@ public class ExecutionController implements java.io.Closeable {
     private final AtomicLong requestCounter = new AtomicLong(0);
     private final CountDownLatch completionLatch = new CountDownLatch(1);
     private final Thread shutdownHook;
+
+    /**
+     * Recorder for per-request latency in microseconds (thread-safe, lock-free).
+     * Values are recorded in microseconds and converted to milliseconds on read.
+     */
+    private final Recorder latencyRecorder = new Recorder(
+            TimeUnit.MINUTES.toMicros(60), // max trackable value: 1 hour in µs
+            3                              // 3 significant digits
+    );
 
     /**
      * Creates a new ExecutionController using its own HttpClient.
@@ -208,7 +220,9 @@ public class ExecutionController implements java.io.Closeable {
         executor.submit(() -> {
             long requestStartTime = System.currentTimeMillis();
             long elapsedTime = requestStartTime - testStartTime;
+            long nanoStart = System.nanoTime();
             requestExecutor.executeRequest(requestId, elapsedTime);
+            latencyRecorder.recordValue((System.nanoTime() - nanoStart) / 1000);
         });
     }
 
@@ -317,6 +331,26 @@ public class ExecutionController implements java.io.Closeable {
             testRunning.set(false);
             completionLatch.countDown();
         }
+    }
+
+    /**
+     * Returns a snapshot of latency percentiles recorded during (or after) the test.
+     * Calls {@link Recorder#flip()} to capture all values recorded so far.
+     * All returned values are in milliseconds.
+     *
+     * @return a {@link LatencyStats} containing p50, p95, p99, max, and mean latency in ms
+     */
+    public LatencyStats getLatencyPercentiles() {
+        Histogram h = latencyRecorder.getIntervalHistogram();
+        if (h.getTotalCount() == 0) {
+            return new LatencyStats(0.0, 0.0, 0.0, 0.0, 0.0);
+        }
+        double p50Ms  = h.getValueAtPercentile(50.0)  / 1000.0;
+        double p95Ms  = h.getValueAtPercentile(95.0)  / 1000.0;
+        double p99Ms  = h.getValueAtPercentile(99.0)  / 1000.0;
+        double maxMs  = h.getMaxValue()               / 1000.0;
+        double meanMs = h.getMean()                   / 1000.0;
+        return new LatencyStats(p50Ms, p95Ms, p99Ms, maxMs, meanMs);
     }
 
     /**

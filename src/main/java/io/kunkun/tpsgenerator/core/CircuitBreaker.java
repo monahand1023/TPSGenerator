@@ -157,6 +157,7 @@ public class CircuitBreaker {
         lock.writeLock().lock();
         try {
             results.clear();
+            cachedErrorRate.set(0.0);
             if (isOpen.compareAndSet(true, false)) {
                 log.info("Circuit breaker manually reset to closed state");
             }

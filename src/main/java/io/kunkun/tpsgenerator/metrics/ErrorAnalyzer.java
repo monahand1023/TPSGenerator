@@ -174,7 +174,7 @@ public class ErrorAnalyzer {
      */
     public int getTotalErrorResponseCount() {
         return errorResponseSamples.values().stream()
-                .mapToInt(List::size)
+                .mapToInt(LinkedBlockingDeque::size)
                 .sum();
     }
 
