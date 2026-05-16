@@ -1,6 +1,7 @@
 package io.kunkun.tpsgenerator.metrics.exporter;
 
 import io.kunkun.tpsgenerator.model.ResourceSnapshot;
+import io.kunkun.tpsgenerator.metrics.LatencyStats;
 import io.kunkun.tpsgenerator.metrics.TestMetrics;
 import io.kunkun.tpsgenerator.metrics.TpsMetrics;
 import lombok.extern.slf4j.Slf4j;
@@ -27,13 +28,29 @@ public class CSVExporter {
                     .withZone(ZoneId.systemDefault());
 
     /**
-     * Exports metrics to a CSV file.
+     * Exports metrics to a CSV file (without HdrHistogram latency columns).
+     * Provided for backward compatibility; prefer
+     * {@link #exportMetrics(TestMetrics, LatencyStats, File)}.
      *
      * @param metrics the metrics to export
      * @param outputFile the output file
      * @throws IOException if writing to the file fails
      */
     public void exportMetrics(TestMetrics metrics, File outputFile) throws IOException {
+        exportMetrics(metrics, null, outputFile);
+    }
+
+    /**
+     * Exports metrics to a CSV file, including HdrHistogram latency percentiles.
+     *
+     * @param metrics the metrics to export
+     * @param latencyStats HdrHistogram latency percentiles (may be {@code null}, in which case
+     *                     latency columns are omitted)
+     * @param outputFile the output file
+     * @throws IOException if writing to the file fails
+     */
+    public void exportMetrics(TestMetrics metrics, LatencyStats latencyStats, File outputFile)
+            throws IOException {
         log.info("Exporting metrics to {}", outputFile.getAbsolutePath());
 
         try (FileWriter writer = new FileWriter(outputFile)) {
@@ -73,6 +90,20 @@ public class CSVExporter {
             printer.printRecord("P90 Rate Limiter Wait (ms)", metrics.getRateLimiterWaitPercentile(90));
             printer.printRecord("P99 Rate Limiter Wait (ms)", metrics.getRateLimiterWaitPercentile(99));
             printer.printRecord("Max Rate Limiter Wait (ms)", metrics.getRateLimiterWaitPercentile(100));
+
+            // HdrHistogram latency percentiles (end-to-end, warm-up excluded)
+            if (latencyStats != null) {
+                printer.printRecord("HDR P50 Latency (ms)",
+                        String.format("%.3f", latencyStats.getP50Ms()));
+                printer.printRecord("HDR P95 Latency (ms)",
+                        String.format("%.3f", latencyStats.getP95Ms()));
+                printer.printRecord("HDR P99 Latency (ms)",
+                        String.format("%.3f", latencyStats.getP99Ms()));
+                printer.printRecord("HDR Max Latency (ms)",
+                        String.format("%.3f", latencyStats.getMaxMs()));
+                printer.printRecord("HDR Mean Latency (ms)",
+                        String.format("%.3f", latencyStats.getMeanMs()));
+            }
 
             // Status code distribution
             Map<Integer, Long> statusCodes = metrics.getStatusCodeCounts();

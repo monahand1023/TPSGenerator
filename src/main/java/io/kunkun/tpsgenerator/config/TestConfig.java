@@ -31,6 +31,23 @@ public class TestConfig {
             throw new IllegalArgumentException("Test duration must be a positive duration");
         }
 
+        if (warmupDuration != null && warmupDuration.isNegative()) {
+            throw new IllegalArgumentException("Warm-up duration must not be negative");
+        }
+
+        if (thinkTimeMs < 0) {
+            throw new IllegalArgumentException("thinkTimeMs must not be negative");
+        }
+
+        if (thinkTimeJitterMs < 0) {
+            throw new IllegalArgumentException("thinkTimeJitterMs must not be negative");
+        }
+
+        if (failThresholdErrorRate < 0.0 || failThresholdErrorRate > 1.0) {
+            throw new IllegalArgumentException(
+                    "failThresholdErrorRate must be in the range [0.0, 1.0]");
+        }
+
         if (trafficPattern == null) {
             throw new IllegalArgumentException("Traffic pattern configuration is required");
         }
@@ -106,6 +123,42 @@ public class TestConfig {
      * Circuit breaker configuration.
      */
     private CircuitBreakerConfig circuitBreaker;
+
+    /**
+     * Duration of the warm-up phase at the start of the test.
+     * During this period requests are sent at full rate but latency is NOT recorded,
+     * allowing the JVM JIT compiler to warm up before measurements begin.
+     * Defaults to {@link Duration#ZERO} (no warm-up).
+     * JSON key: {@code "warmupDuration"}.
+     */
+    private Duration warmupDuration = Duration.ZERO;
+
+    /**
+     * Base think time in milliseconds added between request submissions.
+     * Simulates realistic user think time between actions.
+     * This idle time is added on top of any rate-limiter delay.
+     * Defaults to {@code 0} (no think time).
+     * JSON key: {@code "thinkTimeMs"}.
+     */
+    private long thinkTimeMs = 0;
+
+    /**
+     * Maximum random jitter in milliseconds added on top of {@link #thinkTimeMs}.
+     * The actual extra delay per submission is drawn uniformly from
+     * {@code [0, thinkTimeJitterMs]}. Ignored when {@code thinkTimeMs == 0}.
+     * Defaults to {@code 0} (no jitter).
+     * JSON key: {@code "thinkTimeJitterMs"}.
+     */
+    private long thinkTimeJitterMs = 0;
+
+    /**
+     * Maximum error rate (as a fraction 0.0–1.0) before the process exits with code 2.
+     * A value of {@code 1.0} (the default) means the test never fails on error rate alone.
+     * A value of {@code 0.0} means any error causes a failure exit.
+     * Example: {@code 0.01} fails the run when more than 1% of requests are errors.
+     * JSON key: {@code "failThresholdErrorRate"}.
+     */
+    private double failThresholdErrorRate = 1.0;
 
     /**
      * Traffic pattern configuration.

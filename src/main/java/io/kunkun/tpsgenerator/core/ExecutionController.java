@@ -16,6 +16,7 @@ import org.HdrHistogram.Recorder;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.concurrent.*;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -36,6 +37,7 @@ public class ExecutionController implements java.io.Closeable {
     private final CircuitBreaker circuitBreaker;
     private final TrafficPattern trafficPattern;
     private final AtomicBoolean testRunning = new AtomicBoolean(false);
+    private final AtomicBoolean warmupComplete = new AtomicBoolean(false);
     private final AtomicLong requestCounter = new AtomicLong(0);
     private final CountDownLatch completionLatch = new CountDownLatch(1);
     private final Thread shutdownHook;
@@ -137,6 +139,16 @@ public class ExecutionController implements java.io.Closeable {
 
         long testStartTime = System.currentTimeMillis();
 
+        // If no warm-up is configured, mark it immediately complete so all requests are recorded.
+        Duration warmupDuration = config.getWarmupDuration();
+        if (warmupDuration == null || warmupDuration.isZero()) {
+            warmupComplete.set(true);
+        } else {
+            warmupComplete.set(false);
+            log.info("Warm-up phase started: latency will not be recorded for {}",
+                    warmupDuration);
+        }
+
         try {
             startMetricsCollection();
             startTrafficPatternScheduler();
@@ -211,18 +223,54 @@ public class ExecutionController implements java.io.Closeable {
     /**
      * Submits a single request to the executor.
      *
+     * <p>If {@code thinkTimeMs > 0} in the configuration, this method sleeps for
+     * {@code thinkTimeMs + random([0, thinkTimeJitterMs])} milliseconds before submitting
+     * the task. This is applied on top of the {@link RateLimiter} delay.
+     *
+     * <p>Latency is only recorded to the HdrHistogram after the warm-up phase has elapsed.
+     *
      * @param requestExecutor the request executor
-     * @param testStartTime the test start time
+     * @param testStartTime the test start time in milliseconds
+     * @throws InterruptedException if the thread is interrupted during think-time sleep
      */
-    private void submitRequest(RequestExecutor requestExecutor, long testStartTime) {
+    private void submitRequest(RequestExecutor requestExecutor, long testStartTime)
+            throws InterruptedException {
+
+        // Check and transition warm-up state before each submission.
+        if (!warmupComplete.get()) {
+            Duration warmupDuration = config.getWarmupDuration();
+            long elapsedMs = System.currentTimeMillis() - testStartTime;
+            if (warmupDuration != null && elapsedMs >= warmupDuration.toMillis()) {
+                // CAS to ensure the transition message is logged exactly once.
+                if (warmupComplete.compareAndSet(false, true)) {
+                    log.info("Warm-up phase complete after {} ms — latency recording is now active",
+                            elapsedMs);
+                }
+            }
+        }
+
+        // Apply think time + jitter between submissions if configured.
+        long thinkTimeMs = config.getThinkTimeMs();
+        if (thinkTimeMs > 0) {
+            long jitterMs = config.getThinkTimeJitterMs();
+            long sleepMs = thinkTimeMs
+                    + (jitterMs > 0 ? ThreadLocalRandom.current().nextLong(jitterMs + 1) : 0);
+            Thread.sleep(sleepMs);
+        }
+
         long requestId = requestCounter.incrementAndGet();
+
+        // Capture warm-up state at submission time so the lambda uses a consistent value.
+        final boolean recordLatency = warmupComplete.get();
 
         executor.submit(() -> {
             long requestStartTime = System.currentTimeMillis();
             long elapsedTime = requestStartTime - testStartTime;
             long nanoStart = System.nanoTime();
             requestExecutor.executeRequest(requestId, elapsedTime);
-            latencyRecorder.recordValue((System.nanoTime() - nanoStart) / 1000);
+            if (recordLatency) {
+                latencyRecorder.recordValue((System.nanoTime() - nanoStart) / 1000);
+            }
         });
     }
 

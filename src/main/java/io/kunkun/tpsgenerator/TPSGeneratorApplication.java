@@ -6,6 +6,7 @@ import io.kunkun.tpsgenerator.core.ExecutionController;
 import io.kunkun.tpsgenerator.metrics.LatencyStats;
 import io.kunkun.tpsgenerator.metrics.MetricsCollector;
 import io.kunkun.tpsgenerator.metrics.exporter.CSVExporter;
+import io.kunkun.tpsgenerator.metrics.exporter.JsonExporter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.kunkun.tpsgenerator.utils.HttpUtils;
@@ -90,15 +91,34 @@ public class TPSGeneratorApplication {
             String timestamp = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")
                     .withZone(ZoneId.systemDefault())
                     .format(startTime);
-            String resultsFile = String.format("%s/%s_%s.csv",
-                    outputDir, config.getName(), timestamp);
+            String baseName = String.format("%s/%s_%s", outputDir, config.getName(), timestamp);
 
-            CSVExporter exporter = new CSVExporter();
-            exporter.exportMetrics(metricsCollector.getTestMetrics(), new File(resultsFile));
-            log.info("Results exported to {}", resultsFile);
+            // CSV export (with HdrHistogram latency columns)
+            String csvFile = baseName + ".csv";
+            CSVExporter csvExporter = new CSVExporter();
+            csvExporter.exportMetrics(metricsCollector.getTestMetrics(), latencyStats,
+                    new File(csvFile));
+            log.info("CSV results exported to {}", csvFile);
+
+            // JSON export
+            String jsonFile = baseName + ".json";
+            JsonExporter jsonExporter = new JsonExporter();
+            jsonExporter.exportResults(config.getName(), metricsCollector.getTestMetrics(),
+                    latencyStats, new File(jsonFile));
+            log.info("JSON results exported to {}", jsonFile);
 
             // Print summary
             printSummary(metricsCollector, testDuration, latencyStats);
+
+            // Fail-threshold check: exit 2 if error rate exceeds configured threshold
+            double errorRate = 1.0 - metricsCollector.getTestMetrics().getSuccessRate();
+            double threshold = config.getFailThresholdErrorRate();
+            if (errorRate > threshold) {
+                log.error("Test failed: error rate {}% exceeded threshold {}%",
+                        String.format("%.2f", errorRate * 100),
+                        String.format("%.2f", threshold * 100));
+                System.exit(2);
+            }
 
         } catch (Exception e) {
             log.error("Error executing test", e);
