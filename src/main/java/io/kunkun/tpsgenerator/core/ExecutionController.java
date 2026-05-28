@@ -39,6 +39,7 @@ public class ExecutionController implements java.io.Closeable {
     private final AtomicBoolean testRunning = new AtomicBoolean(false);
     private final AtomicBoolean warmupComplete = new AtomicBoolean(false);
     private final AtomicLong requestCounter = new AtomicLong(0);
+    private volatile long lastProgressLogTime = 0;
     private final CountDownLatch completionLatch = new CountDownLatch(1);
     private final Thread shutdownHook;
 
@@ -119,11 +120,12 @@ public class ExecutionController implements java.io.Closeable {
             this.circuitBreaker = null;
         }
 
-        // Register shutdown hook for cleanup
+        log.info("Initialized execution controller with traffic pattern: {}", trafficPattern);
+
+        // Register shutdown hook last, after all initialization succeeds,
+        // so the hook is not orphaned if the constructor throws.
         this.shutdownHook = new Thread(this::shutdownResources, "tps-shutdown-hook");
         Runtime.getRuntime().addShutdownHook(shutdownHook);
-
-        log.info("Initialized execution controller with traffic pattern: {}", trafficPattern);
     }
 
     /**
@@ -207,7 +209,7 @@ public class ExecutionController implements java.io.Closeable {
             submitRequest(requestExecutor, testStartTime);
 
             // Small sleep to prevent CPU spinning
-            Thread.sleep(1);
+            Thread.sleep(Constants.EXECUTOR_LOOP_SLEEP_MS);
         }
     }
 
@@ -339,8 +341,11 @@ public class ExecutionController implements java.io.Closeable {
                 // Update the rate limiter
                 rateLimiter.setRate(targetTps);
 
-                // Log progress every 10 seconds
-                if (elapsedTimeMs % 10000 < 1000) {
+                // Log progress every PROGRESS_LOG_INTERVAL_MS, using a timestamp
+                // comparison instead of modulo to avoid dependency on exact scheduler timing.
+                long now = System.currentTimeMillis();
+                if (now - lastProgressLogTime >= Constants.PROGRESS_LOG_INTERVAL_MS) {
+                    lastProgressLogTime = now;
                     double completionPercentage = 100.0 * elapsedTimeMs / totalDurationMs;
                     double currentTps = metricsCollector.getCurrentTps();
 

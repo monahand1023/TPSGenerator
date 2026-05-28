@@ -32,7 +32,7 @@ class CustomPatternTest {
         String content = "time,tps\n0,100\n1000,200\n2000,300";
         Files.writeString(patternFile, content);
 
-        CustomPattern pattern = new CustomPattern(patternFile.toString(), false);
+        CustomPattern pattern = new CustomPattern(patternFile.toString());
 
         assertEquals(300, pattern.getMaxTps());
     }
@@ -43,7 +43,7 @@ class CustomPatternTest {
         String content = "time,tps\n0,100\n1000,200";
         Files.writeString(patternFile, content);
 
-        CustomPattern pattern = new CustomPattern(patternFile.toString(), false);
+        CustomPattern pattern = new CustomPattern(patternFile.toString());
 
         // At time 500ms, should be halfway between 100 and 200
         double tps = pattern.getTpsAtTime(500, 2000);
@@ -56,7 +56,7 @@ class CustomPatternTest {
         String content = "time,tps\n1000,100\n2000,200";
         Files.writeString(patternFile, content);
 
-        CustomPattern pattern = new CustomPattern(patternFile.toString(), false);
+        CustomPattern pattern = new CustomPattern(patternFile.toString());
 
         double tps = pattern.getTpsAtTime(500, 5000);
         assertEquals(100, tps);
@@ -68,34 +68,20 @@ class CustomPatternTest {
         String content = "time,tps\n0,100\n1000,200";
         Files.writeString(patternFile, content);
 
-        CustomPattern pattern = new CustomPattern(patternFile.toString(), false);
+        CustomPattern pattern = new CustomPattern(patternFile.toString());
 
         double tps = pattern.getTpsAtTime(2000, 5000);
         assertEquals(200, tps);
     }
 
     @Test
-    @DisplayName("Should handle time in milliseconds")
-    void shouldHandleTimeInMilliseconds() throws IOException {
+    @DisplayName("Should treat time column values as milliseconds")
+    void shouldTreatTimeValuesAsMilliseconds() throws IOException {
         String content = "time,tps\n0,100\n1000,200";
         Files.writeString(patternFile, content);
 
-        CustomPattern pattern = new CustomPattern(patternFile.toString(), true);
+        CustomPattern pattern = new CustomPattern(patternFile.toString());
 
-        double tps = pattern.getTpsAtTime(1000, 5000);
-        assertEquals(200, tps);
-    }
-
-    @Test
-    @DisplayName("Should handle time in seconds")
-    void shouldHandleTimeInSeconds() throws IOException {
-        // Time in seconds (will be converted to ms)
-        String content = "time,tps\n0,100\n1,200";
-        Files.writeString(patternFile, content);
-
-        CustomPattern pattern = new CustomPattern(patternFile.toString(), false);
-
-        // 1 second = 1000ms
         double tps = pattern.getTpsAtTime(1000, 5000);
         assertEquals(200, tps);
     }
@@ -106,7 +92,7 @@ class CustomPatternTest {
         String content = "time,tps\n0,100";
         Files.writeString(patternFile, content);
 
-        CustomPattern pattern = new CustomPattern(patternFile.toString(), false);
+        CustomPattern pattern = new CustomPattern(patternFile.toString());
 
         assertEquals(100, pattern.getTpsAtTime(0, 1000));
         assertEquals(100, pattern.getTpsAtTime(500, 1000));
@@ -123,7 +109,7 @@ class CustomPatternTest {
         }
         Files.writeString(patternFile, content.toString());
 
-        CustomPattern pattern = new CustomPattern(patternFile.toString(), true);
+        CustomPattern pattern = new CustomPattern(patternFile.toString());
 
         // Test multiple interpolations
         for (int i = 0; i < 1000; i += 100) {
@@ -138,7 +124,7 @@ class CustomPatternTest {
     @DisplayName("Should throw exception for non-existent file")
     void shouldThrowExceptionForNonExistentFile() {
         assertThrows(IOException.class, () ->
-            new CustomPattern("/non/existent/file.csv", false)
+            new CustomPattern("/non/existent/file.csv")
         );
     }
 
@@ -148,7 +134,7 @@ class CustomPatternTest {
         Files.writeString(patternFile, "time,tps\n");
 
         assertThrows(IOException.class, () ->
-            new CustomPattern(patternFile.toString(), false)
+            new CustomPattern(patternFile.toString())
         );
     }
 }

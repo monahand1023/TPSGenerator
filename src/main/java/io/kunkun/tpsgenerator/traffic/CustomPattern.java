@@ -28,19 +28,13 @@ public class CustomPattern implements TrafficPattern {
     private double maxTps = 0;
 
     /**
-     * Whether the time units in the file are in milliseconds (true) or seconds (false).
-     */
-    private final boolean timeInMilliseconds;
-
-    /**
      * Creates a custom traffic pattern from a file.
+     * Time values in the file are always treated as milliseconds.
      *
      * @param patternFile the path to the pattern file
-     * @param timeInMilliseconds whether the time units in the file are in milliseconds
      * @throws IOException if reading the file fails
      */
-    public CustomPattern(String patternFile, boolean timeInMilliseconds) throws IOException {
-        this.timeInMilliseconds = timeInMilliseconds;
+    public CustomPattern(String patternFile) throws IOException {
         loadPatternFile(patternFile);
         log.info("Loaded custom traffic pattern with {} data points", dataPoints.size());
     }
@@ -82,13 +76,7 @@ public class CustomPattern implements TrafficPattern {
                     double time = Double.parseDouble(record.get(timeColumn));
                     double tps = Double.parseDouble(record.get(tpsColumn));
 
-                    // Convert time to milliseconds: the flag indicates whether the
-                    // file already contains milliseconds (true) or seconds (false).
-                    // When false (seconds), multiply by 1000; when true (ms), use directly.
-                    // NOTE: the flag condition was historically inverted — the correct
-                    // mapping is: timeInMilliseconds=true → use as-is, false → ×1000.
-                    // However, all current callers pass times already in ms regardless of the
-                    // flag value, so we always treat the column as milliseconds directly.
+                    // Time values in the file are treated as milliseconds directly.
                     long timeMs = (long) time;
 
                     dataPoints.add(new DataPoint(timeMs, tps));

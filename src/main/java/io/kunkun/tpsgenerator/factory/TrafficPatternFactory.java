@@ -72,9 +72,8 @@ public class TrafficPatternFactory {
             throw new IllegalArgumentException("Pattern file must be specified for custom traffic pattern");
         }
 
-        boolean timeInMs = config.isTimeInMilliseconds();
         try {
-            return new CustomPattern(patternFile, timeInMs);
+            return new CustomPattern(patternFile);
         } catch (IOException e) {
             throw new IllegalArgumentException("Failed to load custom pattern file: " + patternFile, e);
         }

@@ -88,4 +88,12 @@ public final class Constants {
      * Progress log interval in milliseconds.
      */
     public static final int PROGRESS_LOG_INTERVAL_MS = 10000;
+
+    // ============== Execution Loop Configuration ==============
+
+    /**
+     * How long the main execution loop sleeps between request submissions (ms).
+     * Prevents CPU spinning while still allowing rapid request submission.
+     */
+    public static final long EXECUTOR_LOOP_SLEEP_MS = 1;
 }
