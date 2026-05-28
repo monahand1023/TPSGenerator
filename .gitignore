@@ -1,2 +1,6 @@
 /target/
 /logs/tps-generator.log
+
+# Local secrets — never commit
+.env
+.env.local
