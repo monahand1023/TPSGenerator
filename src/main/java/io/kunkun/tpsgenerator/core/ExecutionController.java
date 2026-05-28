@@ -10,8 +10,6 @@ import io.kunkun.tpsgenerator.request.RequestGenerator;
 import io.kunkun.tpsgenerator.traffic.TrafficPattern;
 import com.google.common.util.concurrent.RateLimiter;
 import lombok.extern.slf4j.Slf4j;
-import org.HdrHistogram.Histogram;
-import org.HdrHistogram.Recorder;
 
 import java.net.http.HttpClient;
 import java.time.Duration;
@@ -21,41 +19,43 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Controls the execution of a load test.
- * This class orchestrates the test execution, manages threads, and controls the traffic rate.
- * Implements Closeable for proper resource cleanup.
+ * Orchestrates the execution of a load test.
+ *
+ * <p>Wires together {@link ExecutionResourceManager} (thread pool + shutdown),
+ * {@link RateLimiterScheduler} (traffic-pattern-driven rate updates),
+ * {@link LatencyRecorderAdapter} (HDR histogram wrapper), and
+ * {@link RequestExecutor} (per-request HTTP logic).
+ *
+ * <p>The public API — constructor signatures, {@link #execute()},
+ * {@link #getLatencyPercentiles()}, {@link #stop()}, and {@link #close()} —
+ * is unchanged from the original implementation.
  */
 @Slf4j
 public class ExecutionController implements java.io.Closeable {
+
     private final TestConfig config;
     private final MetricsCollector metricsCollector;
-    private final ExecutorService executor;
-    private final ScheduledExecutorService scheduler;
-    private final RateLimiter rateLimiter;
     private final HttpClient httpClient;
     private final RequestGenerator requestGenerator;
     private final CircuitBreaker circuitBreaker;
-    private final TrafficPattern trafficPattern;
+    private final RateLimiter rateLimiter;
+
+    private final ExecutionResourceManager resourceManager;
+    private final LatencyRecorderAdapter latencyRecorder;
+
     private final AtomicBoolean testRunning = new AtomicBoolean(false);
     private final AtomicBoolean warmupComplete = new AtomicBoolean(false);
     private final AtomicLong requestCounter = new AtomicLong(0);
-    private volatile long lastProgressLogTime = 0;
     private final CountDownLatch completionLatch = new CountDownLatch(1);
-    private final Thread shutdownHook;
+
+    // -------------------------------------------------------------------------
+    // Constructors
+    // -------------------------------------------------------------------------
 
     /**
-     * Recorder for per-request latency in microseconds (thread-safe, lock-free).
-     * Values are recorded in microseconds and converted to milliseconds on read.
-     */
-    private final Recorder latencyRecorder = new Recorder(
-            TimeUnit.MINUTES.toMicros(60), // max trackable value: 1 hour in µs
-            3                              // 3 significant digits
-    );
-
-    /**
-     * Creates a new ExecutionController using its own HttpClient.
+     * Creates a new ExecutionController using its own {@link HttpClient}.
      *
-     * @param config the test configuration
+     * @param config           the test configuration
      * @param metricsCollector the metrics collector for recording test results
      */
     public ExecutionController(TestConfig config, MetricsCollector metricsCollector) {
@@ -66,73 +66,62 @@ public class ExecutionController implements java.io.Closeable {
     }
 
     /**
-     * Creates a new ExecutionController with a shared HttpClient.
-     * Prefer this constructor when sharing a client with other components (e.g. DashboardClient).
+     * Creates a new ExecutionController with a shared {@link HttpClient}.
+     * Prefer this constructor when sharing a client with other components
+     * (e.g. {@code DashboardClient}).
      *
-     * @param config the test configuration
+     * @param config           the test configuration
      * @param metricsCollector the metrics collector for recording test results
-     * @param httpClient the shared HttpClient to use
+     * @param httpClient       the shared HttpClient to use
      */
-    public ExecutionController(TestConfig config, MetricsCollector metricsCollector, HttpClient httpClient) {
+    public ExecutionController(TestConfig config, MetricsCollector metricsCollector,
+                               HttpClient httpClient) {
         this.config = config;
         this.metricsCollector = metricsCollector;
         this.httpClient = httpClient;
 
-        // Create traffic pattern using factory
-        this.trafficPattern = TrafficPatternFactory.create(config.getTrafficPattern());
-
-        // Initialize thread pool
-        this.executor = new ThreadPoolExecutor(
-                config.getThreadPool().getCoreSize(),
-                config.getThreadPool().getMaxSize(),
-                config.getThreadPool().getKeepAliveTime().toMillis(),
-                TimeUnit.MILLISECONDS,
-                new ArrayBlockingQueue<>(config.getThreadPool().getQueueSize()),
-                new ThreadFactory() {
-                    private final AtomicLong counter = new AtomicLong(0);
-                    @Override
-                    public Thread newThread(Runnable r) {
-                        Thread thread = new Thread(r);
-                        thread.setName("tps-worker-" + counter.incrementAndGet());
-                        return thread;
-                    }
-                },
-                new ThreadPoolExecutor.CallerRunsPolicy()
-        );
-
-        // Initialize rate limiter with initial rate
-        double initialTps = this.trafficPattern.getTpsAtTime(0, config.getTestDuration().toMillis());
+        TrafficPattern trafficPattern = TrafficPatternFactory.create(config.getTrafficPattern());
+        double initialTps = trafficPattern.getTpsAtTime(0, config.getTestDuration().toMillis());
         this.rateLimiter = RateLimiter.create(initialTps);
 
-        // Initialize scheduler for rate updates
-        this.scheduler = Executors.newScheduledThreadPool(1);
-
-        // Initialize request generator
+        this.resourceManager = new ExecutionResourceManager(config);
+        this.latencyRecorder = new LatencyRecorderAdapter(true);
         this.requestGenerator = new RequestGenerator(config);
 
-        // Initialize circuit breaker if enabled
         if (config.getCircuitBreaker().isEnabled()) {
             this.circuitBreaker = new CircuitBreaker(
                     config.getCircuitBreaker().getErrorThreshold(),
-                    config.getCircuitBreaker().getWindowSize()
-            );
+                    config.getCircuitBreaker().getWindowSize());
         } else {
             this.circuitBreaker = null;
         }
 
+        // RateLimiterScheduler is created just before execute() so it can
+        // capture metricsCollector.getStartTime() accurately — but we keep a
+        // reference to trafficPattern and totalDurationMs for that.
+        // We store them in locals here and build the scheduler in execute().
+        this._trafficPattern = trafficPattern;
+
         log.info("Initialized execution controller with traffic pattern: {}", trafficPattern);
 
-        // Register shutdown hook last, after all initialization succeeds,
+        // Register shutdown hook last — after all initialization succeeds —
         // so the hook is not orphaned if the constructor throws.
-        this.shutdownHook = new Thread(this::shutdownResources, "tps-shutdown-hook");
-        Runtime.getRuntime().addShutdownHook(shutdownHook);
+        resourceManager.addShutdownHook();
     }
+
+    // Stored only so execute() can build RateLimiterScheduler after metrics start.
+    private final TrafficPattern _trafficPattern;
+
+    // -------------------------------------------------------------------------
+    // Main public API
+    // -------------------------------------------------------------------------
 
     /**
      * Executes the load test.
      *
      * @return the test result
      * @throws InterruptedException if the test is interrupted
+     * @throws IllegalStateException if the test is already running
      */
     public TestResult execute() throws InterruptedException {
         if (!testRunning.compareAndSet(false, true)) {
@@ -141,109 +130,113 @@ public class ExecutionController implements java.io.Closeable {
 
         long testStartTime = System.currentTimeMillis();
 
-        // If no warm-up is configured, mark it immediately complete so all requests are recorded.
         Duration warmupDuration = config.getWarmupDuration();
         if (warmupDuration == null || warmupDuration.isZero()) {
             warmupComplete.set(true);
         } else {
             warmupComplete.set(false);
-            log.info("Warm-up phase started: latency will not be recorded for {}",
-                    warmupDuration);
+            log.info("Warm-up phase started: latency will not be recorded for {}", warmupDuration);
         }
 
         try {
-            startMetricsCollection();
-            startTrafficPatternScheduler();
+            metricsCollector.start();
 
-            RequestExecutor requestExecutor = createRequestExecutor();
+            RateLimiterScheduler rateLimiterScheduler = new RateLimiterScheduler(
+                    _trafficPattern, rateLimiter, resourceManager, metricsCollector,
+                    config.getTestDuration().toMillis());
+            rateLimiterScheduler.start();
+
+            RequestExecutor requestExecutor = RequestExecutor.builder()
+                    .httpClient(httpClient)
+                    .requestGenerator(requestGenerator)
+                    .rateLimiter(rateLimiter)
+                    .metricsCollector(metricsCollector)
+                    .circuitBreaker(circuitBreaker)
+                    .build();
+
             executeMainLoop(requestExecutor, testStartTime);
 
             return completeTest(testStartTime);
 
         } finally {
-            cleanup();
+            testRunning.set(false);
+            resourceManager.getScheduler().shutdownNow();
         }
     }
 
     /**
-     * Starts the metrics collection.
+     * Returns a snapshot of latency percentiles recorded during (or after) the
+     * test.  All values are in milliseconds.
+     *
+     * @return a {@link LatencyStats} with p50, p95, p99, max, and mean
      */
-    private void startMetricsCollection() {
-        metricsCollector.start();
+    public LatencyStats getLatencyPercentiles() {
+        return latencyRecorder.getLatencyStats();
     }
 
     /**
-     * Creates and configures the request executor.
+     * Waits for the test to complete.
      *
-     * @return the configured RequestExecutor
+     * @param timeout the maximum time to wait
+     * @param unit    the time unit of the timeout
+     * @return {@code true} if the test completed, {@code false} on timeout
+     * @throws InterruptedException if interrupted while waiting
      */
-    private RequestExecutor createRequestExecutor() {
-        return RequestExecutor.builder()
-                .httpClient(httpClient)
-                .requestGenerator(requestGenerator)
-                .rateLimiter(rateLimiter)
-                .metricsCollector(metricsCollector)
-                .circuitBreaker(circuitBreaker)
-                .build();
+    public boolean waitForCompletion(long timeout, TimeUnit unit) throws InterruptedException {
+        return completionLatch.await(timeout, unit);
     }
 
     /**
-     * Executes the main test loop, submitting requests until the test duration expires
-     * or the circuit breaker opens.
-     *
-     * @param requestExecutor the request executor to use
-     * @param testStartTime the test start time in milliseconds
-     * @throws InterruptedException if the thread is interrupted
+     * Stops the test execution.
      */
-    private void executeMainLoop(RequestExecutor requestExecutor, long testStartTime) throws InterruptedException {
+    public void stop() {
+        if (testRunning.get()) {
+            log.info("Stopping test execution");
+            resourceManager.getExecutor().shutdownNow();
+            resourceManager.getScheduler().shutdownNow();
+            testRunning.set(false);
+            completionLatch.countDown();
+        }
+    }
+
+    /**
+     * Closes this controller and releases all resources.
+     */
+    @Override
+    public void close() {
+        stop();
+        resourceManager.shutdownGracefully();
+        resourceManager.removeShutdownHook();
+    }
+
+    // -------------------------------------------------------------------------
+    // Internal execution logic
+    // -------------------------------------------------------------------------
+
+    private void executeMainLoop(RequestExecutor requestExecutor, long testStartTime)
+            throws InterruptedException {
         long testEndTime = testStartTime + config.getTestDuration().toMillis();
-
         log.info("Test started, will run for {} seconds", config.getTestDuration().getSeconds());
 
-        while (System.currentTimeMillis() < testEndTime && !Thread.currentThread().isInterrupted()) {
-            if (isCircuitBreakerOpen()) {
+        while (System.currentTimeMillis() < testEndTime
+                && !Thread.currentThread().isInterrupted()) {
+            if (circuitBreaker != null && !circuitBreaker.allowRequest()) {
                 log.warn("Circuit breaker is open, stopping test");
                 break;
             }
-
             submitRequest(requestExecutor, testStartTime);
-
-            // Small sleep to prevent CPU spinning
             Thread.sleep(Constants.EXECUTOR_LOOP_SLEEP_MS);
         }
     }
 
-    /**
-     * Checks if the circuit breaker is open.
-     *
-     * @return true if the circuit breaker is open, false otherwise
-     */
-    private boolean isCircuitBreakerOpen() {
-        return circuitBreaker != null && !circuitBreaker.allowRequest();
-    }
-
-    /**
-     * Submits a single request to the executor.
-     *
-     * <p>If {@code thinkTimeMs > 0} in the configuration, this method sleeps for
-     * {@code thinkTimeMs + random([0, thinkTimeJitterMs])} milliseconds before submitting
-     * the task. This is applied on top of the {@link RateLimiter} delay.
-     *
-     * <p>Latency is only recorded to the HdrHistogram after the warm-up phase has elapsed.
-     *
-     * @param requestExecutor the request executor
-     * @param testStartTime the test start time in milliseconds
-     * @throws InterruptedException if the thread is interrupted during think-time sleep
-     */
     private void submitRequest(RequestExecutor requestExecutor, long testStartTime)
             throws InterruptedException {
 
-        // Check and transition warm-up state before each submission.
+        // Transition out of warm-up exactly once.
         if (!warmupComplete.get()) {
             Duration warmupDuration = config.getWarmupDuration();
             long elapsedMs = System.currentTimeMillis() - testStartTime;
             if (warmupDuration != null && elapsedMs >= warmupDuration.toMillis()) {
-                // CAS to ensure the transition message is logged exactly once.
                 if (warmupComplete.compareAndSet(false, true)) {
                     log.info("Warm-up phase complete after {} ms — latency recording is now active",
                             elapsedMs);
@@ -261,200 +254,33 @@ public class ExecutionController implements java.io.Closeable {
         }
 
         long requestId = requestCounter.incrementAndGet();
-
-        // Capture warm-up state at submission time so the lambda uses a consistent value.
         final boolean recordLatency = warmupComplete.get();
 
-        executor.submit(() -> {
+        resourceManager.getExecutor().submit(() -> {
             long requestStartTime = System.currentTimeMillis();
             long elapsedTime = requestStartTime - testStartTime;
             long nanoStart = System.nanoTime();
             requestExecutor.executeRequest(requestId, elapsedTime);
             if (recordLatency) {
-                latencyRecorder.recordValue((System.nanoTime() - nanoStart) / 1000);
+                latencyRecorder.record(System.nanoTime() - nanoStart);
             }
         });
     }
 
-    /**
-     * Completes the test by shutting down executors and building the result.
-     *
-     * @param testStartTime the test start time
-     * @return the test result
-     * @throws InterruptedException if interrupted while waiting for shutdown
-     */
     private TestResult completeTest(long testStartTime) throws InterruptedException {
         log.info("Test execution completed, waiting for pending requests to finish");
 
-        shutdownExecutor();
+        ExecutorService executor = resourceManager.getExecutor();
+        executor.shutdown();
+        executor.awaitTermination(Constants.EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+
         completionLatch.countDown();
         metricsCollector.stop();
 
-        return buildTestResult(testStartTime);
-    }
-
-    /**
-     * Shuts down the executor and waits for pending tasks.
-     *
-     * @throws InterruptedException if interrupted while waiting
-     */
-    private void shutdownExecutor() throws InterruptedException {
-        executor.shutdown();
-        executor.awaitTermination(Constants.EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-    }
-
-    /**
-     * Builds the test result.
-     *
-     * @param testStartTime the test start time
-     * @return the test result
-     */
-    private TestResult buildTestResult(long testStartTime) {
         return new TestResult(
                 config.getName(),
                 testStartTime,
                 System.currentTimeMillis(),
-                metricsCollector.getTestMetrics()
-        );
-    }
-
-    /**
-     * Cleans up resources after test execution.
-     */
-    private void cleanup() {
-        testRunning.set(false);
-        scheduler.shutdownNow();
-    }
-
-    /**
-     * Starts the scheduler that updates the rate limiter based on the traffic pattern.
-     */
-    private void startTrafficPatternScheduler() {
-        long totalDurationMs = config.getTestDuration().toMillis();
-
-        // Schedule rate updates every second
-        scheduler.scheduleAtFixedRate(() -> {
-            try {
-                long elapsedTimeMs = System.currentTimeMillis() - metricsCollector.getStartTime();
-                // Get the target TPS for the current time
-                double targetTps = trafficPattern.getTpsAtTime(elapsedTimeMs, totalDurationMs);
-                // Update the rate limiter
-                rateLimiter.setRate(targetTps);
-
-                // Log progress every PROGRESS_LOG_INTERVAL_MS, using a timestamp
-                // comparison instead of modulo to avoid dependency on exact scheduler timing.
-                long now = System.currentTimeMillis();
-                if (now - lastProgressLogTime >= Constants.PROGRESS_LOG_INTERVAL_MS) {
-                    lastProgressLogTime = now;
-                    double completionPercentage = 100.0 * elapsedTimeMs / totalDurationMs;
-                    double currentTps = metricsCollector.getCurrentTps();
-
-                    log.info("Progress: {}% | Target TPS: {} | Actual TPS: {} | Success Rate: {}%",
-                            String.format("%.1f", completionPercentage),
-                            String.format("%.2f", targetTps),
-                            String.format("%.2f", currentTps),
-                            String.format("%.2f", metricsCollector.getTestMetrics().getSuccessRate() * 100));
-                }
-            } catch (Exception e) {
-                log.error("Error updating rate limiter", e);
-            }
-        }, 0, 1, TimeUnit.SECONDS);
-    }
-
-    /**
-     * Waits for the test to complete.
-     *
-     * @param timeout the maximum time to wait
-     * @param unit the time unit of the timeout
-     * @return true if the test completed, false if it timed out
-     * @throws InterruptedException if interrupted while waiting
-     */
-    public boolean waitForCompletion(long timeout, TimeUnit unit) throws InterruptedException {
-        return completionLatch.await(timeout, unit);
-    }
-
-    /**
-     * Stops the test execution.
-     */
-    public void stop() {
-        if (testRunning.get()) {
-            log.info("Stopping test execution");
-            executor.shutdownNow();
-            scheduler.shutdownNow();
-            testRunning.set(false);
-            completionLatch.countDown();
-        }
-    }
-
-    /**
-     * Returns a snapshot of latency percentiles recorded during (or after) the test.
-     * Calls {@link Recorder#flip()} to capture all values recorded so far.
-     * All returned values are in milliseconds.
-     *
-     * @return a {@link LatencyStats} containing p50, p95, p99, max, and mean latency in ms
-     */
-    public LatencyStats getLatencyPercentiles() {
-        Histogram h = latencyRecorder.getIntervalHistogram();
-        if (h.getTotalCount() == 0) {
-            return new LatencyStats(0.0, 0.0, 0.0, 0.0, 0.0);
-        }
-        double p50Ms  = h.getValueAtPercentile(50.0)  / 1000.0;
-        double p95Ms  = h.getValueAtPercentile(95.0)  / 1000.0;
-        double p99Ms  = h.getValueAtPercentile(99.0)  / 1000.0;
-        double maxMs  = h.getMaxValue()               / 1000.0;
-        double meanMs = h.getMean()                   / 1000.0;
-        return new LatencyStats(p50Ms, p95Ms, p99Ms, maxMs, meanMs);
-    }
-
-    /**
-     * Closes this controller and releases all resources.
-     * Removes the shutdown hook if not called from the hook itself.
-     */
-    @Override
-    public void close() {
-        stop();
-        shutdownResources();
-
-        // Remove shutdown hook if not currently executing it
-        try {
-            if (!Thread.currentThread().equals(shutdownHook)) {
-                Runtime.getRuntime().removeShutdownHook(shutdownHook);
-            }
-        } catch (IllegalStateException e) {
-            // JVM is already shutting down, ignore
-        }
-    }
-
-    /**
-     * Shuts down executor resources gracefully.
-     */
-    private void shutdownResources() {
-        log.debug("Shutting down executor resources");
-
-        // Shutdown executor if not already shutdown
-        if (!executor.isShutdown()) {
-            executor.shutdown();
-            try {
-                if (!executor.awaitTermination(Constants.GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-                    executor.shutdownNow();
-                }
-            } catch (InterruptedException e) {
-                executor.shutdownNow();
-                Thread.currentThread().interrupt();
-            }
-        }
-
-        // Shutdown scheduler if not already shutdown
-        if (!scheduler.isShutdown()) {
-            scheduler.shutdown();
-            try {
-                if (!scheduler.awaitTermination(Constants.GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-                    scheduler.shutdownNow();
-                }
-            } catch (InterruptedException e) {
-                scheduler.shutdownNow();
-                Thread.currentThread().interrupt();
-            }
-        }
+                metricsCollector.getTestMetrics());
     }
 }
