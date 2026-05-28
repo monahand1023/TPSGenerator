@@ -204,11 +204,6 @@ public class TestConfig {
          * Path to custom traffic pattern file (for custom pattern).
          */
         private String patternFile;
-
-        /**
-         * Whether time values in the pattern file are in milliseconds (true) or seconds (false).
-         */
-        private boolean timeInMilliseconds = false;
     }
 
     /**
