@@ -6,6 +6,7 @@ import io.kunkun.tpsgenerator.config.TestConfig;
 import io.kunkun.tpsgenerator.core.ExecutionController;
 import io.kunkun.tpsgenerator.metrics.LatencyStats;
 import io.kunkun.tpsgenerator.metrics.MetricsCollector;
+import io.kunkun.tpsgenerator.metrics.RunComparator;
 import io.kunkun.tpsgenerator.metrics.TestMetrics;
 import io.kunkun.tpsgenerator.metrics.exporter.CSVExporter;
 import io.kunkun.tpsgenerator.metrics.exporter.JsonExporter;
@@ -39,6 +40,12 @@ public class TPSGeneratorApplication {
         if (args.length < 1) {
             printUsage();
             System.exit(1);
+        }
+
+        // Subcommand: compare two prior JSON result files for regression gating.
+        if ("compare".equalsIgnoreCase(args[0])) {
+            runComparison(args);
+            return;
         }
 
         if (args.length > 2 && "--verbose".equals(args[2])) {
@@ -172,6 +179,42 @@ public class TPSGeneratorApplication {
             breaches.add(String.format("average TPS %.2f below %.2f", metrics.getAverageTps(), sla.getMinAverageTps()));
         }
         return breaches;
+    }
+
+    /**
+     * Handles the {@code compare} subcommand: diffs two JSON result files and exits 4 on regression.
+     * Usage: {@code compare <baseline.json> <candidate.json> [maxLatencyRegressionPct] [maxSuccessRateDrop]}
+     */
+    private static void runComparison(String[] args) {
+        if (args.length < 3) {
+            System.out.println("Usage: java -jar tps-generator.jar compare <baseline.json> <candidate.json> "
+                    + "[maxLatencyRegressionPct=10] [maxSuccessRateDrop=0.01]");
+            System.exit(1);
+            return;
+        }
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> baseline = mapper.readValue(new File(args[1]), java.util.Map.class);
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> candidate = mapper.readValue(new File(args[2]), java.util.Map.class);
+            double maxLatPct = args.length > 3 ? Double.parseDouble(args[3]) : 10.0;
+            double maxSrDrop = args.length > 4 ? Double.parseDouble(args[4]) : 0.01;
+
+            RunComparator.Result result = RunComparator.compare(baseline, candidate, maxLatPct, maxSrDrop);
+
+            System.out.println("\n=== Run Comparison (baseline -> candidate) ===");
+            result.getLines().forEach(System.out::println);
+            if (result.hasRegressions()) {
+                System.out.println("\n=== REGRESSIONS ===");
+                result.getRegressions().forEach(r -> System.out.println(" - " + r));
+                System.exit(4);
+            }
+            System.out.println("\nNo regressions beyond thresholds.");
+        } catch (Exception e) {
+            log.error("Comparison failed", e);
+            System.exit(1);
+        }
     }
 
     private static TestConfig loadConfig(String configFile) throws IOException {
