@@ -86,7 +86,15 @@ public class ResourceMonitor implements Closeable {
      * Stops monitoring resources.
      */
     public void stop() {
-        if (running.compareAndSet(true, false)) {
+        // Flip the running flag while holding the snapshots lock so it is
+        // mutually exclusive with the append in captureSnapshot(). This makes
+        // stop() a hard boundary: any snapshot in flight either completes before
+        // stop() returns or is dropped, so the count cannot grow afterwards.
+        boolean wasRunning;
+        synchronized (snapshots) {
+            wasRunning = running.compareAndSet(true, false);
+        }
+        if (wasRunning) {
             scheduler.shutdownNow();
             log.info("Stopped resource monitoring, collected {} snapshots", snapshots.size());
         }
@@ -136,8 +144,14 @@ public class ResourceMonitor implements Closeable {
                     daemonThreads
             );
 
-            // Add snapshot, removing oldest if at capacity
+            // Add snapshot, removing oldest if at capacity. The running check is
+            // inside the lock — and stop() flips running under the same lock — so
+            // a snapshot captured concurrently with stop() can never be appended
+            // after stop() has returned.
             synchronized (snapshots) {
+                if (!running.get()) {
+                    return;
+                }
                 if (snapshots.size() >= MAX_SNAPSHOTS) {
                     snapshots.remove(0);
                 }
