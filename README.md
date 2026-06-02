@@ -5,6 +5,22 @@
 When I was working at Amazon, we had a tool called "TPS Generator" that we would use to simulate traffic and generate traffic loads. I know that you can do a very quick solution using a tool like Postman (https://blog.postman.com/postman-api-performance-testing/), but if you need something a bit more customizable and flexible, you may need to build out your own solution.
 My solution here is a robust, flexible, and feature-rich load testing tool for generating controlled HTTP traffic patterns to test API performance and reliability. If you also need to use a quick scaffolding to mock a service, be sure to check out my TPSGenerator-Server to quickly do this: https://github.com/monahand1023/TPSGenerator-Server
 
+## How it works
+
+```mermaid
+flowchart LR
+    Cfg["Test config (JSON)"] --> Pat["Traffic pattern<br/>stable · ramp · spike · Markov · custom"]
+    Pat --> RL["Guava RateLimiter<br/>paces submission to target TPS"]
+    RL --> Exec["Virtual-thread-per-task executor<br/>one virtual thread per in-flight request"]
+    Exec --> HC["JDK HttpClient · HTTP/2"]
+    HC --> SUT[("System under test")]
+    HC --> Rec["HdrHistogram<br/>lock-free latency"]
+    Exec -. trips .-> CB["Circuit breaker"]
+    Rec --> Rep["CSV / JSON reports"]
+```
+
+In-flight virtual threads settle at roughly `TPS × latency` (Little's Law) — concurrency is bounded by real load, not a fixed worker pool.
+
 ## Table of Contents
 
 
