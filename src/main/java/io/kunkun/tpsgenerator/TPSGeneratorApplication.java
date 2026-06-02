@@ -6,6 +6,7 @@ import io.kunkun.tpsgenerator.config.TestConfig;
 import io.kunkun.tpsgenerator.core.ExecutionController;
 import io.kunkun.tpsgenerator.metrics.LatencyStats;
 import io.kunkun.tpsgenerator.metrics.MetricsCollector;
+import io.kunkun.tpsgenerator.metrics.TestMetrics;
 import io.kunkun.tpsgenerator.metrics.exporter.CSVExporter;
 import io.kunkun.tpsgenerator.metrics.exporter.JsonExporter;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,6 +25,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Main application class for the TPS Generator.
@@ -124,10 +127,51 @@ public class TPSGeneratorApplication {
                 System.exit(2);
             }
 
+            // SLA check: exit 3 if any configured latency/throughput/success-rate budget is breached.
+            List<String> slaBreaches = evaluateSlaBreaches(
+                    config, latencyStats, metricsCollector.getTestMetrics());
+            if (!slaBreaches.isEmpty()) {
+                System.out.println("\n=== SLA BREACHES ===");
+                for (String breach : slaBreaches) {
+                    log.error("SLA breach: {}", breach);
+                    System.out.println(" - " + breach);
+                }
+                System.exit(3);
+            }
+
         } catch (Exception e) {
             log.error("Error executing test", e);
             System.exit(1);
         }
+    }
+
+    /**
+     * Evaluates the configured SLA thresholds against the test results.
+     * Returns a (possibly empty) list of human-readable breach descriptions.
+     * Pure function (no side effects / no exit) so it is unit-testable.
+     */
+    static List<String> evaluateSlaBreaches(TestConfig config, LatencyStats latency, TestMetrics metrics) {
+        List<String> breaches = new ArrayList<>();
+        TestConfig.SlaConfig sla = config.getSla();
+        if (sla == null) {
+            return breaches;
+        }
+        if (sla.getMaxP50Ms() >= 0 && latency.getP50Ms() > sla.getMaxP50Ms()) {
+            breaches.add(String.format("p50 latency %.1f ms exceeds %d ms", latency.getP50Ms(), sla.getMaxP50Ms()));
+        }
+        if (sla.getMaxP95Ms() >= 0 && latency.getP95Ms() > sla.getMaxP95Ms()) {
+            breaches.add(String.format("p95 latency %.1f ms exceeds %d ms", latency.getP95Ms(), sla.getMaxP95Ms()));
+        }
+        if (sla.getMaxP99Ms() >= 0 && latency.getP99Ms() > sla.getMaxP99Ms()) {
+            breaches.add(String.format("p99 latency %.1f ms exceeds %d ms", latency.getP99Ms(), sla.getMaxP99Ms()));
+        }
+        if (sla.getMinSuccessRate() >= 0 && metrics.getSuccessRate() < sla.getMinSuccessRate()) {
+            breaches.add(String.format("success rate %.4f below %.4f", metrics.getSuccessRate(), sla.getMinSuccessRate()));
+        }
+        if (sla.getMinAverageTps() >= 0 && metrics.getAverageTps() < sla.getMinAverageTps()) {
+            breaches.add(String.format("average TPS %.2f below %.2f", metrics.getAverageTps(), sla.getMinAverageTps()));
+        }
+        return breaches;
     }
 
     private static TestConfig loadConfig(String configFile) throws IOException {

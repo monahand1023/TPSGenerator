@@ -136,6 +136,13 @@ public class TestConfig {
     private ResponseValidationConfig responseValidation;
 
     /**
+     * Optional pass/fail SLA thresholds. Any breach makes the process exit with code 3,
+     * so the tool can gate a CI pipeline on latency/throughput/success-rate budgets.
+     * JSON key: {@code "sla"}.
+     */
+    private SlaConfig sla;
+
+    /**
      * Duration of the warm-up phase at the start of the test.
      * During this period requests are sent at full rate but latency is NOT recorded,
      * allowing the JVM JIT compiler to warm up before measurements begin.
@@ -390,6 +397,24 @@ public class TestConfig {
          * Window size for error rate calculation.
          */
         private int windowSize = 100;
+    }
+
+    /**
+     * Pass/fail SLA thresholds. Each bound is optional; a negative value means "not checked".
+     * Latency bounds are in milliseconds and compared against the end-to-end latency percentiles.
+     */
+    @Data
+    public static class SlaConfig {
+        /** Maximum acceptable p50 latency in ms ({@code -1} = unchecked). */
+        private long maxP50Ms = -1;
+        /** Maximum acceptable p95 latency in ms ({@code -1} = unchecked). */
+        private long maxP95Ms = -1;
+        /** Maximum acceptable p99 latency in ms ({@code -1} = unchecked). */
+        private long maxP99Ms = -1;
+        /** Minimum acceptable success rate in [0,1] ({@code -1} = unchecked). */
+        private double minSuccessRate = -1;
+        /** Minimum acceptable average (offered) TPS ({@code -1} = unchecked). */
+        private double minAverageTps = -1;
     }
 
     /**
