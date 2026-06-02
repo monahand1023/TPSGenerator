@@ -139,8 +139,16 @@ public class RequestTemplate {
             return "";
         }
 
+        // Fast path: a template with no placeholders (the common case for static URLs/bodies)
+        // skips the regex Matcher allocation entirely.
+        if (template.indexOf("${") < 0) {
+            return template;
+        }
+
+        // StringBuilder (not the synchronized StringBuffer) — appendReplacement/appendTail
+        // accept StringBuilder since Java 9.
         Matcher matcher = PARAM_PATTERN.matcher(template);
-        StringBuffer result = new StringBuffer();
+        StringBuilder result = new StringBuilder();
         while (matcher.find()) {
             String key = matcher.group(1);
             String value = parameters.getOrDefault(key, matcher.group(0)); // keep original if not found

@@ -48,6 +48,10 @@ public class TestConfig {
                     "failThresholdErrorRate must be in the range [0.0, 1.0]");
         }
 
+        if (submissionThreads < 1) {
+            throw new IllegalArgumentException("submissionThreads must be at least 1");
+        }
+
         if (trafficPattern == null) {
             throw new IllegalArgumentException("Traffic pattern configuration is required");
         }
@@ -159,6 +163,15 @@ public class TestConfig {
      * JSON key: {@code "failThresholdErrorRate"}.
      */
     private double failThresholdErrorRate = 1.0;
+
+    /**
+     * Number of concurrent submission loops that pace requests against the (shared) rate limiter.
+     * The default of 1 preserves existing behaviour; raising it distributes the per-request
+     * submission overhead across threads so the generator can sustain very high target TPS that a
+     * single submission loop would bottleneck. The total offered rate is still governed by the
+     * rate limiter / traffic pattern. JSON key: {@code "submissionThreads"}.
+     */
+    private int submissionThreads = 1;
 
     /**
      * Traffic pattern configuration.

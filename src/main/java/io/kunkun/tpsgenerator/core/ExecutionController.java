@@ -62,6 +62,9 @@ public class ExecutionController implements java.io.Closeable {
         this(config, metricsCollector, HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(Constants.DEFAULT_CONNECT_TIMEOUT_SECONDS))
                 .version(HttpClient.Version.HTTP_2)
+                // Virtual-thread executor for response callbacks scales to high concurrency
+                // without ballooning a cached platform-thread pool.
+                .executor(Executors.newVirtualThreadPerTaskExecutor())
                 .build());
     }
 
@@ -222,8 +225,36 @@ public class ExecutionController implements java.io.Closeable {
     private void executeMainLoop(RequestExecutor requestExecutor, long testStartTime)
             throws InterruptedException {
         long testEndTime = testStartTime + config.getTestDuration().toMillis();
-        log.info("Test started, will run for {} seconds", config.getTestDuration().getSeconds());
+        int submitters = Math.max(1, config.getSubmissionThreads());
+        log.info("Test started, will run for {} seconds ({} submission thread(s))",
+                config.getTestDuration().getSeconds(), submitters);
 
+        if (submitters == 1) {
+            runSubmissionLoop(requestExecutor, testStartTime, testEndTime);
+            return;
+        }
+
+        // Multiple submission loops share the (thread-safe) rate limiter, so the total offered
+        // rate is unchanged but the per-request submission overhead is spread across threads —
+        // raising the ceiling for very high target TPS.
+        Thread[] submitterThreads = new Thread[submitters];
+        for (int i = 0; i < submitters; i++) {
+            submitterThreads[i] = new Thread(() -> {
+                try {
+                    runSubmissionLoop(requestExecutor, testStartTime, testEndTime);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }, "tps-submitter-" + i);
+            submitterThreads[i].start();
+        }
+        for (Thread t : submitterThreads) {
+            t.join();
+        }
+    }
+
+    private void runSubmissionLoop(RequestExecutor requestExecutor, long testStartTime, long testEndTime)
+            throws InterruptedException {
         while (System.currentTimeMillis() < testEndTime
                 && !Thread.currentThread().isInterrupted()) {
             if (circuitBreaker != null && !circuitBreaker.allowRequest()) {

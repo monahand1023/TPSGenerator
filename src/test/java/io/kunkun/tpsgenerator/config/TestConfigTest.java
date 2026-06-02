@@ -201,6 +201,18 @@ class TestConfigTest {
     }
 
     @Test
+    @DisplayName("Should throw exception for submissionThreads below 1")
+    void shouldThrowExceptionForInvalidSubmissionThreads() {
+        config.setSubmissionThreads(0);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> config.validate()
+        );
+        assertTrue(exception.getMessage().contains("submissionThreads"));
+    }
+
+    @Test
     @DisplayName("Should throw exception for empty request templates")
     void shouldThrowExceptionForEmptyRequestTemplates() {
         config.setRequestTemplates(Collections.emptyList());

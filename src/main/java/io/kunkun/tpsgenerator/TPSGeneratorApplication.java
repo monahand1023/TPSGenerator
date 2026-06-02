@@ -70,6 +70,8 @@ public class TPSGeneratorApplication {
             HttpClient sharedHttpClient = HttpClient.newBuilder()
                     .connectTimeout(Duration.ofSeconds(Constants.DEFAULT_CONNECT_TIMEOUT_SECONDS))
                     .version(HttpClient.Version.HTTP_2)
+                    // Virtual-thread executor for response callbacks scales to high concurrency.
+                    .executor(java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor())
                     .build();
 
             // Initialize metrics collector

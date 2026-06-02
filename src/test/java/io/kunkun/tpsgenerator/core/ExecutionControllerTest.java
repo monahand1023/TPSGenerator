@@ -72,6 +72,21 @@ class ExecutionControllerTest {
     }
 
     @Test
+    @DisplayName("execute() with multiple submission threads still completes and records traffic")
+    void executeWithMultipleSubmitters() throws Exception {
+        TestConfig config = config(Duration.ofMillis(300), 200);
+        config.setSubmissionThreads(4);
+        MetricsCollector metrics = new MetricsCollector(config);
+        StubHttpClient client = StubHttpClient.returning(response(200, "OK"));
+
+        try (ExecutionController controller = new ExecutionController(config, metrics, client)) {
+            controller.execute();
+            assertTrue(metrics.getTestMetrics().getTotalRequests() > 0);
+            assertTrue(metrics.getTestMetrics().getSuccessCount() > 0);
+        }
+    }
+
+    @Test
     @DisplayName("close() after a completed run does not throw")
     void closeIsSafe() throws Exception {
         TestConfig config = config(Duration.ofMillis(150), 50);
