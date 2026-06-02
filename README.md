@@ -1,5 +1,7 @@
 # TPS Generator
 
+[![Tests](https://github.com/monahand1023/TPSGenerator/actions/workflows/test.yml/badge.svg)](https://github.com/monahand1023/TPSGenerator/actions/workflows/test.yml) [![Release](https://img.shields.io/github/v/release/monahand1023/TPSGenerator)](https://github.com/monahand1023/TPSGenerator/releases) [![Java 21](https://img.shields.io/badge/Java-21-orange?logo=openjdk)](https://openjdk.org/projects/jdk/21/) [![License: MIT](https://img.shields.io/github/license/monahand1023/TPSGenerator)](LICENSE)
+
 When I was working at Amazon, we had a tool called "TPS Generator" that we would use to simulate traffic and generate traffic loads. I know that you can do a very quick solution using a tool like Postman (https://blog.postman.com/postman-api-performance-testing/), but if you need something a bit more customizable and flexible, you may need to build out your own solution.
 My solution here is a robust, flexible, and feature-rich load testing tool for generating controlled HTTP traffic patterns to test API performance and reliability. If you also need to use a quick scaffolding to mock a service, be sure to check out my TPSGenerator-Server to quickly do this: https://github.com/monahand1023/TPSGenerator-Server
 
