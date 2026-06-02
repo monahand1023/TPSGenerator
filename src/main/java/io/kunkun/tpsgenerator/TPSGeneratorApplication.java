@@ -165,15 +165,16 @@ public class TPSGeneratorApplication {
         System.out.println("Failed Requests: " + metrics.getTestMetrics().getFailureCount());
         System.out.println("Success Rate: " +
                 String.format("%.2f%%", metrics.getTestMetrics().getSuccessRate() * 100));
-        System.out.println("Average TPS: " +
+        // Offered load (requests issued / duration) vs achieved throughput (responses
+        // completed per second) — these diverge when the target can't keep up.
+        System.out.println("Average TPS (offered): " +
                 String.format("%.2f", metrics.getTestMetrics().getAverageTps()));
-        System.out.println("P95 Response Time: " +
-                metrics.getTestMetrics().getResponseTimePercentile(95) + " ms");
+        System.out.println("Max TPS (achieved): " + metrics.getTestMetrics().getMaxTps());
         System.out.println("Max CPU Usage: " +
                 String.format("%.2f%%", metrics.getTestMetrics().getMaxCpuUsage()));
         System.out.println("Max Memory Usage: " +
                 String.format("%.2f MB", metrics.getTestMetrics().getMaxMemoryUsage() / (1024.0 * 1024.0)));
-        System.out.println("--- Latency Percentiles (HDR, end-to-end) ---");
+        System.out.println("--- Latency Percentiles (HDR, end-to-end, coordinated-omission corrected) ---");
         System.out.println("P50 Latency: " + String.format("%.3f ms", latencyStats.getP50Ms()));
         System.out.println("P95 Latency: " + String.format("%.3f ms", latencyStats.getP95Ms()));
         System.out.println("P99 Latency: " + String.format("%.3f ms", latencyStats.getP99Ms()));

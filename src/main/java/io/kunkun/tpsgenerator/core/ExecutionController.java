@@ -5,6 +5,7 @@ import io.kunkun.tpsgenerator.config.TestConfig;
 import io.kunkun.tpsgenerator.factory.TrafficPatternFactory;
 import io.kunkun.tpsgenerator.metrics.LatencyStats;
 import io.kunkun.tpsgenerator.metrics.MetricsCollector;
+import io.kunkun.tpsgenerator.metrics.ResponseTimeMetrics;
 import io.kunkun.tpsgenerator.model.TestResult;
 import io.kunkun.tpsgenerator.request.RequestGenerator;
 import io.kunkun.tpsgenerator.traffic.TrafficPattern;
@@ -41,7 +42,6 @@ public class ExecutionController implements java.io.Closeable {
     private final RateLimiter rateLimiter;
 
     private final ExecutionResourceManager resourceManager;
-    private final LatencyRecorderAdapter latencyRecorder;
 
     private final AtomicBoolean testRunning = new AtomicBoolean(false);
     private final AtomicBoolean warmupComplete = new AtomicBoolean(false);
@@ -85,7 +85,6 @@ public class ExecutionController implements java.io.Closeable {
         this.rateLimiter = RateLimiter.create(initialTps);
 
         this.resourceManager = new ExecutionResourceManager(config);
-        this.latencyRecorder = new LatencyRecorderAdapter(true);
         this.requestGenerator = new RequestGenerator(config);
 
         if (config.getCircuitBreaker().isEnabled()) {
@@ -170,7 +169,15 @@ public class ExecutionController implements java.io.Closeable {
      * @return a {@link LatencyStats} with p50, p95, p99, max, and mean
      */
     public LatencyStats getLatencyPercentiles() {
-        return latencyRecorder.getLatencyStats();
+        ResponseTimeMetrics rtm = metricsCollector.getTestMetrics().getResponseTimeMetrics();
+        // Drain any residual interval into the snapshot so a post-test read is complete.
+        metricsCollector.getTestMetrics().updateHistogramSnapshots();
+        return new LatencyStats(
+                rtm.getResponseTimePercentile(50),
+                rtm.getResponseTimePercentile(95),
+                rtm.getResponseTimePercentile(99),
+                rtm.getMaxResponseTime(),
+                rtm.getMeanResponseTime());
     }
 
     /**
@@ -279,7 +286,7 @@ public class ExecutionController implements java.io.Closeable {
             long elapsedTime = requestStartTime - testStartTime;
             requestExecutor.executeRequest(requestId, elapsedTime);
             if (recordLatency) {
-                latencyRecorder.recordWithExpectedInterval(
+                metricsCollector.recordEndToEndLatency(
                         System.nanoTime() - intendedStartNanos, expectedIntervalNanos);
             }
         });

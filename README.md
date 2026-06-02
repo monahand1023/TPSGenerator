@@ -524,9 +524,8 @@ The following conditions are caught:
 | `trafficPattern` is null | `Traffic pattern configuration is required` |
 | `trafficPattern.type` is null/blank | `Traffic pattern type is required` |
 | `targetTps <= 0` for any non-`custom` pattern | `Target TPS must be positive for pattern type: <type>` |
-| `threadPool` is null | `Thread pool configuration is required` |
-| `threadPool.coreSize <= 0` | `Thread pool core size must be positive` |
-| `threadPool.maxSize < coreSize` | `Thread pool max size must be >= core size` |
+| `threadPool.coreSize <= 0` (only if a `threadPool` block is present) | `Thread pool core size must be positive` |
+| `threadPool.maxSize < coreSize` (only if a `threadPool` block is present) | `Thread pool max size must be >= core size` |
 | No request templates | `At least one request template is required` |
 
 > **Note:** The `custom` traffic pattern does not require `targetTps` to be set — its TPS values come from the `patternFile`.

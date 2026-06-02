@@ -154,15 +154,13 @@ class TestConfigTest {
     }
 
     @Test
-    @DisplayName("Should throw exception for null thread pool")
-    void shouldThrowExceptionForNullThreadPool() {
+    @DisplayName("Should accept a null thread pool (optional under the virtual-thread engine)")
+    void shouldAcceptNullThreadPool() {
+        // threadPool is vestigial — the engine runs one virtual thread per request — so a
+        // config that omits it must validate successfully.
         config.setThreadPool(null);
 
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> config.validate()
-        );
-        assertTrue(exception.getMessage().contains("Thread pool"));
+        assertDoesNotThrow(() -> config.validate());
     }
 
     @Test

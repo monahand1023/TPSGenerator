@@ -55,6 +55,42 @@ class ResponseTimeMetricsTest {
     }
 
     @Test
+    @DisplayName("getMaxResponseTime returns the largest recorded value")
+    void shouldReturnMaxResponseTime() {
+        metrics.recordResponseTime(40);
+        metrics.recordResponseTime(900);
+        metrics.recordResponseTime(120);
+        metrics.updateSnapshots();
+
+        assertEquals(900, metrics.getMaxResponseTime(), 1);
+    }
+
+    @Test
+    @DisplayName("recordResponseTimeWithExpectedInterval synthesises samples for a long stall (CO correction)")
+    void coordinatedOmissionCorrectionLowersMean() {
+        // One 1000 ms observation against a 10 ms expected interval back-fills ~100 samples.
+        metrics.recordResponseTimeWithExpectedInterval(1000, 10);
+        metrics.updateSnapshots();
+
+        assertTrue(metrics.getResponseTimeCount() > 1,
+                "CO correction should synthesise the omitted samples, count was "
+                        + metrics.getResponseTimeCount());
+        assertEquals(1000, metrics.getMaxResponseTime(), 1, "max stays the observed value");
+        assertTrue(metrics.getMeanResponseTime() < 1000,
+                "synthesised lower samples should pull the mean below the single observation");
+    }
+
+    @Test
+    @DisplayName("recordResponseTimeWithExpectedInterval with no interval behaves like a plain record")
+    void coordinatedOmissionCorrectionDisabledForZeroInterval() {
+        metrics.recordResponseTimeWithExpectedInterval(250, 0);
+        metrics.updateSnapshots();
+
+        assertEquals(1, metrics.getResponseTimeCount());
+        assertEquals(250, metrics.getResponseTimePercentile(100), 1);
+    }
+
+    @Test
     @DisplayName("Should record rate limiter wait times")
     void shouldRecordRateLimiterWaitTimes() {
         metrics.recordRateLimiterWait(0.5);  // 500ms

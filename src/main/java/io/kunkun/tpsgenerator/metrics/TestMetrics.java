@@ -139,6 +139,26 @@ public class TestMetrics {
     }
 
     /**
+     * Records an end-to-end response time with coordinated-omission correction.
+     * Delegates to ResponseTimeMetrics.
+     *
+     * @param responseTimeMs     the observed latency in milliseconds
+     * @param expectedIntervalMs the expected inter-request interval in milliseconds
+     */
+    public void recordResponseTimeWithExpectedInterval(long responseTimeMs, long expectedIntervalMs) {
+        responseTimeMetrics.recordResponseTimeWithExpectedInterval(responseTimeMs, expectedIntervalMs);
+    }
+
+    /**
+     * Gets the maximum recorded response time.
+     *
+     * @return the maximum response time in milliseconds
+     */
+    public long getMaxResponseTime() {
+        return responseTimeMetrics.getMaxResponseTime();
+    }
+
+    /**
      * Records rate limiter wait time.
      * Delegates to ResponseTimeMetrics.
      *

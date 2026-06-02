@@ -62,16 +62,16 @@ public class TestConfig {
                     "Target TPS must be positive for pattern type: " + trafficPattern.getType());
         }
 
-        if (threadPool == null) {
-            throw new IllegalArgumentException("Thread pool configuration is required");
-        }
-
-        if (threadPool.getCoreSize() <= 0) {
-            throw new IllegalArgumentException("Thread pool core size must be positive");
-        }
-
-        if (threadPool.getMaxSize() < threadPool.getCoreSize()) {
-            throw new IllegalArgumentException("Thread pool max size must be >= core size");
+        // threadPool is optional: the virtual-thread engine no longer bounds concurrency by a
+        // worker pool, so a missing block is fine. If provided (for backward-compatible configs)
+        // its values are still sanity-checked so a clearly-wrong block surfaces an error.
+        if (threadPool != null) {
+            if (threadPool.getCoreSize() <= 0) {
+                throw new IllegalArgumentException("Thread pool core size must be positive");
+            }
+            if (threadPool.getMaxSize() < threadPool.getCoreSize()) {
+                throw new IllegalArgumentException("Thread pool max size must be >= core size");
+            }
         }
 
         if (requestTemplates == null || requestTemplates.isEmpty()) {

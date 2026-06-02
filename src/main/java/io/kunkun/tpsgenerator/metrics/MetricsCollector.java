@@ -144,8 +144,9 @@ public class MetricsCollector implements Closeable {
         RequestTracker.RequestInfo info = requestTracker.stopTracking(requestId);
 
         if (info != null) {
-            // Record response time
-            testMetrics.recordResponseTime(responseTime);
+            // Note: latency is recorded via recordEndToEndLatency() (single coordinated-omission-
+            // corrected pipeline driven from the submission loop), NOT from this per-response
+            // service time — so the percentile histogram has one consistent, trustworthy source.
 
             // Record status code
             int statusCode = response.statusCode();
@@ -226,6 +227,21 @@ public class MetricsCollector implements Closeable {
      */
     public void recordRateLimiterWait(double waitTime) {
         testMetrics.recordRateLimiterWait(waitTime);
+    }
+
+    /**
+     * Records an end-to-end request latency with coordinated-omission correction. This is the
+     * single source of truth for the latency percentile histogram: the value spans the intended
+     * dispatch time (captured before the rate limiter) to response completion, so back-pressure
+     * under a slow target is reflected honestly.
+     *
+     * @param nanos                 observed end-to-end latency in nanoseconds
+     * @param expectedIntervalNanos expected inter-request interval in nanoseconds
+     */
+    public void recordEndToEndLatency(long nanos, long expectedIntervalNanos) {
+        long valueMs = Math.max(0L, nanos / 1_000_000L);
+        long expectedMs = expectedIntervalNanos / 1_000_000L;
+        testMetrics.recordResponseTimeWithExpectedInterval(valueMs, expectedMs);
     }
 
     /**

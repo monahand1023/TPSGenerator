@@ -78,6 +78,25 @@ public class ResponseTimeMetrics {
     }
 
     /**
+     * Records a response time with coordinated-omission correction. When the observed
+     * latency exceeds {@code expectedIntervalMs}, HdrHistogram back-fills the samples that
+     * an under-issuing generator would otherwise have omitted, so a slow target is reflected
+     * honestly in the percentiles.
+     *
+     * @param responseTimeMs   the observed end-to-end latency in milliseconds
+     * @param expectedIntervalMs the expected inter-request interval in milliseconds
+     *                           (&lt;= 0 disables correction for this sample)
+     */
+    public void recordResponseTimeWithExpectedInterval(long responseTimeMs, long expectedIntervalMs) {
+        long value = Math.min(responseTimeMs, DEFAULT_MAX_VALUE);
+        if (expectedIntervalMs > 0) {
+            responseTimeRecorder.recordValueWithExpectedInterval(value, expectedIntervalMs);
+        } else {
+            responseTimeRecorder.recordValue(value);
+        }
+    }
+
+    /**
      * Records rate limiter wait time (lock-free).
      *
      * @param waitTimeSeconds the wait time in seconds
@@ -142,6 +161,16 @@ public class ResponseTimeMetrics {
      */
     public long getResponseTimeCount() {
         return responseTimeSnapshot.getTotalCount();
+    }
+
+    /**
+     * Gets the maximum recorded response time from the latest snapshot.
+     *
+     * @return the maximum response time in milliseconds
+     */
+    public long getMaxResponseTime() {
+        Histogram snapshot = responseTimeSnapshot;
+        return snapshot.getTotalCount() > 0 ? snapshot.getMaxValue() : 0;
     }
 
     /**
