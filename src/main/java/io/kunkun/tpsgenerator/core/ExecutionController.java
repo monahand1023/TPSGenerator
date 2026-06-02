@@ -95,11 +95,12 @@ public class ExecutionController implements java.io.Closeable {
         this.resourceManager = new ExecutionResourceManager(config);
         this.requestGenerator = new RequestGenerator(config);
 
-        if (config.getCircuitBreaker().isEnabled()) {
+        if (config.getCircuitBreaker() != null && config.getCircuitBreaker().isEnabled()) {
             this.circuitBreaker = new CircuitBreaker(
                     config.getCircuitBreaker().getErrorThreshold(),
                     config.getCircuitBreaker().getWindowSize());
         } else {
+            // circuitBreaker block is optional — null means "no breaker".
             this.circuitBreaker = null;
         }
 

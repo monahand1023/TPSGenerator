@@ -108,6 +108,21 @@ class ExecutionControllerTest {
     }
 
     @Test
+    @DisplayName("runs without a circuitBreaker config block (optional)")
+    void executeWithoutCircuitBreakerConfig() throws Exception {
+        TestConfig config = config(Duration.ofMillis(150), 50);
+        config.setCircuitBreaker(null); // omit the optional block
+
+        MetricsCollector metrics = new MetricsCollector(config);
+        StubHttpClient client = StubHttpClient.returning(response(200, "OK"));
+
+        try (ExecutionController controller = new ExecutionController(config, metrics, client)) {
+            assertDoesNotThrow(controller::execute);
+            assertTrue(metrics.getTestMetrics().getTotalRequests() > 0);
+        }
+    }
+
+    @Test
     @DisplayName("close() after a completed run does not throw")
     void closeIsSafe() throws Exception {
         TestConfig config = config(Duration.ofMillis(150), 50);
