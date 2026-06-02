@@ -4,3 +4,5 @@
 # Local secrets — never commit
 .env
 .env.local
+logs/
+dependency-reduced-pom.xml

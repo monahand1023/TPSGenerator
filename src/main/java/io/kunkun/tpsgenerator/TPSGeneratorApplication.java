@@ -1,6 +1,7 @@
 package io.kunkun.tpsgenerator;
 
 import io.kunkun.tpsgenerator.config.Constants;
+import io.kunkun.tpsgenerator.config.FlexibleDurationDeserializer;
 import io.kunkun.tpsgenerator.config.TestConfig;
 import io.kunkun.tpsgenerator.core.ExecutionController;
 import io.kunkun.tpsgenerator.metrics.LatencyStats;
@@ -8,6 +9,7 @@ import io.kunkun.tpsgenerator.metrics.MetricsCollector;
 import io.kunkun.tpsgenerator.metrics.exporter.CSVExporter;
 import io.kunkun.tpsgenerator.metrics.exporter.JsonExporter;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.kunkun.tpsgenerator.utils.HttpUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -129,6 +131,13 @@ public class TPSGeneratorApplication {
     private static TestConfig loadConfig(String configFile) throws IOException {
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
+
+        // Accept human-friendly durations ("10m", "60s", "1h30m") in addition to
+        // ISO-8601 — registered after JavaTimeModule so it wins for Duration.
+        SimpleModule durations = new SimpleModule();
+        durations.addDeserializer(Duration.class, new FlexibleDurationDeserializer());
+        mapper.registerModule(durations);
+
         return mapper.readValue(new File(configFile), TestConfig.class);
     }
 

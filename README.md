@@ -34,9 +34,8 @@ TPS Generator is a Java-based load testing tool designed to generate controlled 
 
 ## Features
 
+- **Virtual-Thread Concurrency (Java 21 / Project Loom)**: Each in-flight request runs on its own lightweight virtual thread, so the generator scales to tens of thousands of concurrent requests without thread-pool tuning. Offered load is governed by the rate limiter and traffic pattern — in-flight count settles at roughly `TPS × latency` (Little's Law) instead of being capped by a fixed worker pool.
 - **Flexible Traffic Patterns**: Configure stable, ramp-up, spike, or custom traffic patterns
-
-
 - **Parameterized Requests**: Create dynamic requests with values from files or random generators
 - **Comprehensive Metrics Collection**: Measure response times, success rates, TPS, and more
 - **Resource Monitoring**: Track CPU, memory, and thread usage during tests
@@ -98,7 +97,7 @@ The tool supports various traffic pattern implementations:
 
 ### Prerequisites
 
-- Java 11 or higher
+- Java 21 or higher (the request engine uses virtual threads / Project Loom)
 - Maven 3.6 or higher
 
 ### Building the Project
@@ -117,7 +116,13 @@ This will create a runnable JAR file in the `target` directory.
 
 ### Configuration
 
-TPS Generator uses JSON configuration files to define test parameters. Here's a sample configuration:
+TPS Generator uses JSON configuration files to define test parameters.
+
+> **Durations** accept both human-friendly (`"2m"`, `"45s"`, `"1h30m"`) and ISO-8601 (`"PT2M"`, `"PT45S"`) forms.
+>
+> The `threadPool` block is **retained for backward compatibility but no longer bounds concurrency** — since the engine runs one virtual thread per request, offered load is controlled by the traffic pattern / target TPS rather than a worker-pool size.
+
+Here's a sample configuration:
 
 ```json
 {

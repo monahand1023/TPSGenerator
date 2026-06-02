@@ -5,7 +5,6 @@ import io.kunkun.tpsgenerator.config.TestConfig;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Owns the thread pool, scheduler, and shutdown lifecycle for a load test.
@@ -29,24 +28,21 @@ public class ExecutionResourceManager {
      * @param config test configuration; must not be {@code null}
      */
     public ExecutionResourceManager(TestConfig config) {
-        this.executor = new ThreadPoolExecutor(
-                config.getThreadPool().getCoreSize(),
-                config.getThreadPool().getMaxSize(),
-                config.getThreadPool().getKeepAliveTime().toMillis(),
-                TimeUnit.MILLISECONDS,
-                new ArrayBlockingQueue<>(config.getThreadPool().getQueueSize()),
-                new ThreadFactory() {
-                    private final AtomicLong counter = new AtomicLong(0);
+        // Virtual threads (Project Loom, JDK 21): one cheap virtual thread per
+        // in-flight request rather than a bounded platform-thread pool. This
+        // removes the artificial concurrency ceiling that previously throttled
+        // throughput against slow endpoints (the old pool + CallerRunsPolicy
+        // serialised requests once the queue filled). Offered load is now
+        // governed solely by the rate limiter and traffic pattern, so the
+        // in-flight count settles at roughly TPS x latency (Little's Law).
+        this.executor = Executors.newThreadPerTaskExecutor(
+                Thread.ofVirtual().name("tps-worker-", 0).factory());
 
-                    @Override
-                    public Thread newThread(Runnable r) {
-                        Thread t = new Thread(r);
-                        t.setName("tps-worker-" + counter.incrementAndGet());
-                        return t;
-                    }
-                },
-                new ThreadPoolExecutor.CallerRunsPolicy()
-        );
+        if (config.getThreadPool() != null) {
+            log.debug("Using virtual-thread-per-task executor; legacy thread-pool "
+                    + "sizing (maxSize={}) is retained for config compatibility but "
+                    + "no longer bounds concurrency", config.getThreadPool().getMaxSize());
+        }
 
         this.scheduler = Executors.newScheduledThreadPool(1);
 

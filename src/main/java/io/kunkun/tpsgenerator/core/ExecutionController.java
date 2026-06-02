@@ -149,7 +149,6 @@ public class ExecutionController implements java.io.Closeable {
             RequestExecutor requestExecutor = RequestExecutor.builder()
                     .httpClient(httpClient)
                     .requestGenerator(requestGenerator)
-                    .rateLimiter(rateLimiter)
                     .metricsCollector(metricsCollector)
                     .circuitBreaker(circuitBreaker)
                     .build();
@@ -225,7 +224,6 @@ public class ExecutionController implements java.io.Closeable {
                 break;
             }
             submitRequest(requestExecutor, testStartTime);
-            Thread.sleep(Constants.EXECUTOR_LOOP_SLEEP_MS);
         }
     }
 
@@ -252,6 +250,14 @@ public class ExecutionController implements java.io.Closeable {
                     + (jitterMs > 0 ? ThreadLocalRandom.current().nextLong(jitterMs + 1) : 0);
             Thread.sleep(sleepMs);
         }
+
+        // Pace submission to the target rate. Blocking here — on the single
+        // submission loop — rather than inside each worker means virtual threads
+        // are spawned only as fast as the rate limiter allows, so the number of
+        // live threads tracks real in-flight load (TPS x latency) instead of
+        // piling up parked on a permit.
+        double rateLimiterWaitSeconds = rateLimiter.acquire();
+        metricsCollector.recordRateLimiterWait(rateLimiterWaitSeconds);
 
         long requestId = requestCounter.incrementAndGet();
         final boolean recordLatency = warmupComplete.get();

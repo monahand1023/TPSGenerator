@@ -1,6 +1,5 @@
 package io.kunkun.tpsgenerator.core;
 
-import com.google.common.util.concurrent.RateLimiter;
 import io.kunkun.tpsgenerator.config.TestConfig;
 import io.kunkun.tpsgenerator.metrics.MetricsCollector;
 import io.kunkun.tpsgenerator.request.RequestGenerator;
@@ -37,7 +36,6 @@ class RequestExecutorTest {
 
     private RequestGenerator requestGenerator;
     private MetricsCollector metricsCollector;
-    private RateLimiter rateLimiter;
 
     @BeforeEach
     void setUp() {
@@ -45,7 +43,6 @@ class RequestExecutorTest {
         requestGenerator = new RequestGenerator(testConfig);
         metricsCollector = new MetricsCollector(buildMetricsConfig());
         metricsCollector.start();
-        rateLimiter = RateLimiter.create(1_000_000); // effectively unlimited
     }
 
     @AfterEach
@@ -144,16 +141,6 @@ class RequestExecutorTest {
         assertEquals(1L, metricsCollector.getTestMetrics().getTotalRequests());
     }
 
-    // -------- rate limiter wait recorded --------
-
-    @Test
-    @DisplayName("executeRequest records a rate limiter wait via metricsCollector")
-    void rateLimiterWaitRecorded() {
-        StubHttpClient client = StubHttpClient.returning(response(200, "OK"));
-        // Just verify the call doesn't throw — rate limiter wait is a double >= 0
-        assertDoesNotThrow(() -> buildExecutor(client, null, null).executeRequest(8L, 0L));
-    }
-
     // -------- helpers --------
 
     private HttpResponse<String> response(int statusCode, String body) {
@@ -176,7 +163,6 @@ class RequestExecutorTest {
         return RequestExecutor.builder()
                 .httpClient(client)
                 .requestGenerator(requestGenerator)
-                .rateLimiter(rateLimiter)
                 .metricsCollector(metricsCollector)
                 .circuitBreaker(cb)
                 .responseValidator(validator)

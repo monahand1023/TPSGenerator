@@ -4,7 +4,6 @@ import io.kunkun.tpsgenerator.metrics.MetricsCollector;
 import io.kunkun.tpsgenerator.request.RequestGenerationException;
 import io.kunkun.tpsgenerator.request.RequestGenerator;
 import io.kunkun.tpsgenerator.request.ResponseValidator;
-import com.google.common.util.concurrent.RateLimiter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.http.HttpClient;
@@ -23,7 +22,6 @@ public class RequestExecutor {
 
     private final HttpClient httpClient;
     private final RequestGenerator requestGenerator;
-    private final RateLimiter rateLimiter;
     private final MetricsCollector metricsCollector;
     private final CircuitBreaker circuitBreaker;
     private final ResponseValidator responseValidator;
@@ -36,7 +34,6 @@ public class RequestExecutor {
     private RequestExecutor(Builder builder) {
         this.httpClient = Objects.requireNonNull(builder.httpClient, "httpClient is required");
         this.requestGenerator = Objects.requireNonNull(builder.requestGenerator, "requestGenerator is required");
-        this.rateLimiter = Objects.requireNonNull(builder.rateLimiter, "rateLimiter is required");
         this.metricsCollector = Objects.requireNonNull(builder.metricsCollector, "metricsCollector is required");
         this.circuitBreaker = builder.circuitBreaker; // Optional, can be null
         this.responseValidator = builder.responseValidator; // Optional, can be null
@@ -57,7 +54,6 @@ public class RequestExecutor {
     public static class Builder {
         private HttpClient httpClient;
         private RequestGenerator requestGenerator;
-        private RateLimiter rateLimiter;
         private MetricsCollector metricsCollector;
         private CircuitBreaker circuitBreaker;
         private ResponseValidator responseValidator;
@@ -81,17 +77,6 @@ public class RequestExecutor {
          */
         public Builder requestGenerator(RequestGenerator requestGenerator) {
             this.requestGenerator = requestGenerator;
-            return this;
-        }
-
-        /**
-         * Sets the rate limiter.
-         *
-         * @param rateLimiter the rate limiter
-         * @return this builder
-         */
-        public Builder rateLimiter(RateLimiter rateLimiter) {
-            this.rateLimiter = rateLimiter;
             return this;
         }
 
@@ -147,11 +132,10 @@ public class RequestExecutor {
      */
     public void executeRequest(long requestId, long elapsedTimeMs) {
         try {
-            // Acquire permit from rate limiter
-            double waitTime = rateLimiter.acquire();
-
-            // Record rate limiter wait time
-            metricsCollector.recordRateLimiterWait(waitTime);
+            // Rate limiting and warm-up pacing happen on the submission loop
+            // (see ExecutionController); this method runs on a virtual thread
+            // and is responsible only for issuing the request and recording the
+            // outcome.
 
             // Check circuit breaker if enabled
             if (circuitBreaker != null && !circuitBreaker.allowRequest()) {
