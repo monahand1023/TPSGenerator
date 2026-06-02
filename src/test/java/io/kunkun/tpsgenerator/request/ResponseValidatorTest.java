@@ -1,6 +1,5 @@
 package io.kunkun.tpsgenerator.request;
 
-import io.kunkun.tpsgenerator.metrics.ErrorAnalyzer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,12 +23,10 @@ import static org.junit.jupiter.api.Assertions.*;
 class ResponseValidatorTest {
 
     private ResponseValidator validator;
-    private ErrorAnalyzer errorAnalyzer;
 
     @BeforeEach
     void setUp() {
-        errorAnalyzer = new ErrorAnalyzer();
-        validator = new ResponseValidator(errorAnalyzer);
+        validator = new ResponseValidator();
     }
 
     // -------- status code range --------

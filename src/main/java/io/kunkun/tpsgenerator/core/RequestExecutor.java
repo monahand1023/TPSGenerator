@@ -185,8 +185,9 @@ public class RequestExecutor {
                     }
                 }
 
-                // Record response
-                metricsCollector.recordResponse(requestId, response, responseTime);
+                // Record response with the validation-aware verdict so a 2xx that fails
+                // validation is counted once, as a failure.
+                metricsCollector.recordResponse(requestId, response, responseTime, isSuccess);
 
                 // Update circuit breaker
                 if (circuitBreaker != null) {

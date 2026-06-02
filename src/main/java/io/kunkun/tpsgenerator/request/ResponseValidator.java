@@ -1,28 +1,25 @@
 package io.kunkun.tpsgenerator.request;
 
-import io.kunkun.tpsgenerator.metrics.ErrorAnalyzer;
 import lombok.Builder;
 import lombok.Data;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
 
 /**
  * Validates HTTP responses against configured criteria.
- * This class allows defining validation rules for responses and checking if responses meet these rules.
+ *
+ * <p>This is a pure predicate: {@link #validate} has no metrics side-effects. The caller
+ * (RequestExecutor) is responsible for recording the validation outcome, so a single request
+ * is counted exactly once (previously a validation failure was recorded as a success by the
+ * metrics collector AND as an error here — a double count).
  */
 @Slf4j
-@RequiredArgsConstructor
 public class ResponseValidator {
-
-    /**
-     * The error analyzer for recording validation failures.
-     */
-    private final ErrorAnalyzer errorAnalyzer;
 
     /**
      * The list of validation rules.
@@ -131,7 +128,7 @@ public class ResponseValidator {
                     if (body == null) {
                         return minBytes == 0;
                     }
-                    int size = body.toString().getBytes().length;
+                    int size = body.toString().getBytes(StandardCharsets.UTF_8).length;
                     return size >= minBytes && size <= maxBytes;
                 }
         );
@@ -182,12 +179,6 @@ public class ResponseValidator {
         }
 
         boolean isValid = failures.isEmpty();
-
-        // Record error response if validation failed
-        if (!isValid) {
-            errorAnalyzer.recordErrorResponse(response.statusCode(), response.body());
-        }
-
         return new ValidationResult(isValid, failures);
     }
 

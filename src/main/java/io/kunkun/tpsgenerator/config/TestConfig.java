@@ -129,6 +129,13 @@ public class TestConfig {
     private CircuitBreakerConfig circuitBreaker;
 
     /**
+     * Optional response validation. When enabled, each 2xx response is additionally checked
+     * against the configured rules; a response that fails validation is counted as a failure.
+     * JSON key: {@code "responseValidation"}.
+     */
+    private ResponseValidationConfig responseValidation;
+
+    /**
      * Duration of the warm-up phase at the start of the test.
      * During this period requests are sent at full rate but latency is NOT recorded,
      * allowing the JVM JIT compiler to warm up before measurements begin.
@@ -322,11 +329,6 @@ public class TestConfig {
         private ResourceMonitoringConfig resourceMonitoring = new ResourceMonitoringConfig();
 
         /**
-         * InfluxDB configuration for metrics export.
-         */
-        private InfluxDBConfig influxDb;
-
-        /**
          * Dashboard configuration.
          */
         private DashboardConfig dashboard;
@@ -345,37 +347,6 @@ public class TestConfig {
              * Interval between resource samples.
              */
             private Duration sampleInterval = Duration.ofSeconds(5);
-        }
-
-        /**
-         * InfluxDB configuration.
-         */
-        @Data
-        public static class InfluxDBConfig {
-            /**
-             * Whether InfluxDB export is enabled.
-             */
-            private boolean enabled = false;
-
-            /**
-             * URL of InfluxDB server.
-             */
-            private String url;
-
-            /**
-             * Token for authentication.
-             */
-            private String token;
-
-            /**
-             * Organization name.
-             */
-            private String org;
-
-            /**
-             * Bucket name.
-             */
-            private String bucket;
         }
 
         /**
@@ -419,5 +390,29 @@ public class TestConfig {
          * Window size for error rate calculation.
          */
         private int windowSize = 100;
+    }
+
+    /**
+     * Optional response validation configuration. A {@code -1} size bound means "unbounded".
+     */
+    @Data
+    public static class ResponseValidationConfig {
+        /** Whether response validation is active. */
+        private boolean enabled = false;
+
+        /** Lowest acceptable status code (inclusive). */
+        private int expectedStatusMin = 200;
+
+        /** Highest acceptable status code (inclusive). */
+        private int expectedStatusMax = 299;
+
+        /** If set, the response body must contain this substring. */
+        private String bodyContains;
+
+        /** Minimum acceptable response body size in bytes ({@code -1} = no minimum). */
+        private int minSizeBytes = -1;
+
+        /** Maximum acceptable response body size in bytes ({@code -1} = no maximum). */
+        private int maxSizeBytes = -1;
     }
 }

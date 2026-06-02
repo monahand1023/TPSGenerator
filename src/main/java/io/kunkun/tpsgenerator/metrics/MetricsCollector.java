@@ -1,6 +1,7 @@
 package io.kunkun.tpsgenerator.metrics;
 
 import io.kunkun.tpsgenerator.config.TestConfig;
+import io.kunkun.tpsgenerator.utils.HttpUtils;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -129,6 +130,9 @@ public class MetricsCollector implements Closeable {
      */
     public void recordRequestStart(long requestId, HttpRequest request) {
         requestTracker.startTracking(requestId, request);
+        // Account for bytes sent (method + URL + headers + Content-Length). Previously this path
+        // was never invoked, so totalBytesSent was always 0.
+        networkMetrics.recordRequest(request, HttpUtils.estimateRequestSize(request));
         testMetrics.incrementTotalRequests();
     }
 
@@ -140,6 +144,23 @@ public class MetricsCollector implements Closeable {
      * @param responseTime the response time in milliseconds
      */
     public void recordResponse(long requestId, HttpResponse<String> response, long responseTime) {
+        boolean statusSuccess = response.statusCode() >= 200 && response.statusCode() < 300;
+        recordResponse(requestId, response, responseTime, statusSuccess);
+    }
+
+    /**
+     * Records a response with an explicit success verdict. Lets the caller fold response
+     * validation into the success/failure decision so a 2xx that fails validation is counted
+     * as a single failure (not double-counted as both a success and an error).
+     *
+     * @param requestId    the request ID
+     * @param response     the HTTP response
+     * @param responseTime the response time in milliseconds (kept for API symmetry; latency is
+     *                     recorded via {@link #recordEndToEndLatency})
+     * @param isSuccess    the final success verdict (status code AND any response validation)
+     */
+    public void recordResponse(long requestId, HttpResponse<String> response, long responseTime,
+                               boolean isSuccess) {
         // Stop tracking the request
         RequestTracker.RequestInfo info = requestTracker.stopTracking(requestId);
 
@@ -152,8 +173,7 @@ public class MetricsCollector implements Closeable {
             int statusCode = response.statusCode();
             testMetrics.recordStatusCode(statusCode);
 
-            // Record success/failure
-            boolean isSuccess = statusCode >= 200 && statusCode < 300;
+            // Record success/failure using the caller's verdict
             if (isSuccess) {
                 testMetrics.incrementSuccessCount();
             } else {

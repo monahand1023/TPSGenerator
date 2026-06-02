@@ -87,6 +87,27 @@ class ExecutionControllerTest {
     }
 
     @Test
+    @DisplayName("response validation wired from config: failing validation counts 200s as failures")
+    void responseValidationWiredFromConfig() throws Exception {
+        TestConfig config = config(Duration.ofMillis(250), 100);
+        TestConfig.ResponseValidationConfig rv = new TestConfig.ResponseValidationConfig();
+        rv.setEnabled(true);
+        rv.setBodyContains("WILL-NOT-MATCH");
+        config.setResponseValidation(rv);
+
+        MetricsCollector metrics = new MetricsCollector(config);
+        StubHttpClient client = StubHttpClient.returning(response(200, "OK"));
+
+        try (ExecutionController controller = new ExecutionController(config, metrics, client)) {
+            controller.execute();
+            assertTrue(metrics.getTestMetrics().getTotalRequests() > 0);
+            assertEquals(0L, metrics.getTestMetrics().getSuccessCount(),
+                    "every 200 fails the body-contains rule, so none count as success");
+            assertTrue(metrics.getTestMetrics().getFailureCount() > 0);
+        }
+    }
+
+    @Test
     @DisplayName("close() after a completed run does not throw")
     void closeIsSafe() throws Exception {
         TestConfig config = config(Duration.ofMillis(150), 50);

@@ -73,13 +73,6 @@
       "enabled": true,
       "sampleInterval": "5s"
     },
-    "influxDb": {
-      "enabled": false,
-      "url": "http://localhost:8086",
-      "token": "your-influx-token",
-      "org": "your-org",
-      "bucket": "tps-metrics"
-    },
     "dashboard": {
       "enabled": false,
       "url": "http://localhost:8080",

@@ -8,6 +8,7 @@ import io.kunkun.tpsgenerator.metrics.MetricsCollector;
 import io.kunkun.tpsgenerator.metrics.ResponseTimeMetrics;
 import io.kunkun.tpsgenerator.model.TestResult;
 import io.kunkun.tpsgenerator.request.RequestGenerator;
+import io.kunkun.tpsgenerator.request.ResponseValidator;
 import io.kunkun.tpsgenerator.traffic.TrafficPattern;
 import com.google.common.util.concurrent.RateLimiter;
 import lombok.extern.slf4j.Slf4j;
@@ -153,6 +154,7 @@ public class ExecutionController implements java.io.Closeable {
                     .requestGenerator(requestGenerator)
                     .metricsCollector(metricsCollector)
                     .circuitBreaker(circuitBreaker)
+                    .responseValidator(buildResponseValidator())
                     .build();
 
             executeMainLoop(requestExecutor, testStartTime);
@@ -221,6 +223,29 @@ public class ExecutionController implements java.io.Closeable {
     // -------------------------------------------------------------------------
     // Internal execution logic
     // -------------------------------------------------------------------------
+
+    /**
+     * Builds a {@link ResponseValidator} from config, or {@code null} when validation is disabled.
+     */
+    private ResponseValidator buildResponseValidator() {
+        TestConfig.ResponseValidationConfig rv = config.getResponseValidation();
+        if (rv == null || !rv.isEnabled()) {
+            return null;
+        }
+        ResponseValidator validator = new ResponseValidator()
+                .withStatusCodeRange(rv.getExpectedStatusMin(), rv.getExpectedStatusMax());
+        if (rv.getBodyContains() != null && !rv.getBodyContains().isBlank()) {
+            validator.withBodyContaining(rv.getBodyContains());
+        }
+        if (rv.getMinSizeBytes() >= 0 || rv.getMaxSizeBytes() >= 0) {
+            int min = Math.max(0, rv.getMinSizeBytes());
+            int max = rv.getMaxSizeBytes() >= 0 ? rv.getMaxSizeBytes() : Integer.MAX_VALUE;
+            validator.withSizeRange(min, max);
+        }
+        log.info("Response validation enabled (status [{}-{}])",
+                rv.getExpectedStatusMin(), rv.getExpectedStatusMax());
+        return validator;
+    }
 
     private void executeMainLoop(RequestExecutor requestExecutor, long testStartTime)
             throws InterruptedException {

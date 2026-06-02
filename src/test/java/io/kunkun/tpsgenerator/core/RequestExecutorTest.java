@@ -118,7 +118,7 @@ class RequestExecutorTest {
     @DisplayName("Validation failure on 200 response: request is still recorded as total")
     void validationFailureRequestIsRecorded() {
         StubHttpClient client = StubHttpClient.returning(response(200, "unexpected body"));
-        ResponseValidator validator = new ResponseValidator(metricsCollector.getErrorAnalyzer());
+        ResponseValidator validator = new ResponseValidator();
         validator.withBodyContaining("required text"); // will fail
 
         buildExecutor(client, null, validator).executeRequest(6L, 0L);
@@ -130,15 +130,16 @@ class RequestExecutorTest {
     @DisplayName("Validation failure counts response as a failure via metricsCollector")
     void validationFailureCountedAsFailure() {
         StubHttpClient client = StubHttpClient.returning(response(200, "bad body"));
-        ResponseValidator validator = new ResponseValidator(metricsCollector.getErrorAnalyzer());
+        ResponseValidator validator = new ResponseValidator();
         validator.withBodyContaining("expected content"); // will fail
 
         buildExecutor(client, null, validator).executeRequest(7L, 0L);
 
-        // The executor still calls recordResponse so success count may be 1;
-        // the validation failure is reflected in the circuit breaker path but
-        // the core assertion here is that the request was recorded.
+        // A 2xx that fails validation is now counted exactly once — as a failure, not a
+        // success (previously it was double-counted: success in metrics + error in analyzer).
         assertEquals(1L, metricsCollector.getTestMetrics().getTotalRequests());
+        assertEquals(0L, metricsCollector.getTestMetrics().getSuccessCount());
+        assertEquals(1L, metricsCollector.getTestMetrics().getFailureCount());
     }
 
     // -------- helpers --------
