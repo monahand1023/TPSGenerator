@@ -436,7 +436,9 @@ When the error rate exceeds the threshold, the circuit breaker "opens" and stops
 
 ### Dashboard Integration
 
-TPS Generator can send metrics to a dashboard service for visualization:
+TPS Generator streams live metrics (register → periodic updates → final result) to a dashboard
+service. **TPSGenerator-Server implements this backend** and serves a live UI at `/dashboard`, so
+enabling the block below points the run at it out of the box:
 
 ```json
 "dashboard": {
@@ -445,6 +447,12 @@ TPS Generator can send metrics to a dashboard service for visualization:
   "apiKey": "your-api-key"
 }
 ```
+
+`url` is the dashboard server base URL; `apiKey` is optional and sent as `X-API-Key` only when set
+(it must match the server's `DASHBOARD_API_KEY` if the server has one configured). Open
+`http://localhost:8080/dashboard` in a browser to watch runs update in real time. Dashboard
+reporting is best-effort — if the dashboard is unreachable the load test still runs and reports
+normally.
 
 ### Resource Monitoring
 

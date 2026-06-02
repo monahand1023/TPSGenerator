@@ -6,6 +6,7 @@ import io.kunkun.tpsgenerator.factory.TrafficPatternFactory;
 import io.kunkun.tpsgenerator.metrics.LatencyStats;
 import io.kunkun.tpsgenerator.metrics.MetricsCollector;
 import io.kunkun.tpsgenerator.metrics.ResponseTimeMetrics;
+import io.kunkun.tpsgenerator.metrics.exporter.DashboardClient;
 import io.kunkun.tpsgenerator.model.TestResult;
 import io.kunkun.tpsgenerator.request.RequestGenerator;
 import io.kunkun.tpsgenerator.request.ResponseValidator;
@@ -43,6 +44,9 @@ public class ExecutionController implements java.io.Closeable {
     private final RateLimiter rateLimiter;
 
     private final ExecutionResourceManager resourceManager;
+
+    /** Optional live-dashboard reporter; non-null only when dashboard reporting is enabled. */
+    private volatile DashboardClient dashboardClient;
 
     private final AtomicBoolean testRunning = new AtomicBoolean(false);
     private final AtomicBoolean warmupComplete = new AtomicBoolean(false);
@@ -149,6 +153,8 @@ public class ExecutionController implements java.io.Closeable {
                     config.getTestDuration().toMillis());
             rateLimiterScheduler.start();
 
+            startDashboardIfEnabled();
+
             RequestExecutor requestExecutor = RequestExecutor.builder()
                     .httpClient(httpClient)
                     .requestGenerator(requestGenerator)
@@ -205,6 +211,9 @@ public class ExecutionController implements java.io.Closeable {
             log.info("Stopping test execution");
             resourceManager.getExecutor().shutdownNow();
             resourceManager.getScheduler().shutdownNow();
+            if (dashboardClient != null) {
+                dashboardClient.stop();
+            }
             testRunning.set(false);
             completionLatch.countDown();
         }
@@ -223,6 +232,26 @@ public class ExecutionController implements java.io.Closeable {
     // -------------------------------------------------------------------------
     // Internal execution logic
     // -------------------------------------------------------------------------
+
+    /**
+     * Starts live dashboard reporting if {@code metrics.dashboard.enabled} is set. Failures here
+     * never abort the test — dashboard reporting is best-effort.
+     */
+    private void startDashboardIfEnabled() {
+        TestConfig.MetricsConfig mc = config.getMetrics();
+        if (mc == null || mc.getDashboard() == null || !mc.getDashboard().isEnabled()) {
+            return;
+        }
+        try {
+            String testId = java.util.UUID.randomUUID().toString();
+            dashboardClient = new DashboardClient(config, testId, httpClient);
+            dashboardClient.startRealtimeUpdates(metricsCollector::getTestMetrics, 2000L);
+            log.info("Live dashboard reporting enabled (testId={})", testId);
+        } catch (Exception e) {
+            log.warn("Dashboard reporting could not be started: {}", e.getMessage());
+            dashboardClient = null;
+        }
+    }
 
     /**
      * Builds a {@link ResponseValidator} from config, or {@code null} when validation is disabled.
@@ -357,6 +386,12 @@ public class ExecutionController implements java.io.Closeable {
 
         completionLatch.countDown();
         metricsCollector.stop();
+
+        // Push the final result + mark the run finished on the dashboard, if enabled.
+        if (dashboardClient != null) {
+            dashboardClient.stop();
+            dashboardClient.sendTestResult(metricsCollector.getTestMetrics());
+        }
 
         return new TestResult(
                 config.getName(),

@@ -6,6 +6,7 @@ import io.kunkun.tpsgenerator.model.ResourceSnapshot;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -75,6 +76,22 @@ public class DashboardClient {
     }
 
     /**
+     * POSTs a JSON payload to {@code dashboardUrl + path}. The X-API-Key header is only added when
+     * an API key is configured — HttpRequest.Builder.header(name, null) would otherwise throw.
+     */
+    private HttpResponse<String> postJson(String path, String jsonPayload)
+            throws IOException, InterruptedException {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create(dashboardUrl + path))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(jsonPayload));
+        if (apiKey != null && !apiKey.isBlank()) {
+            builder.header("X-API-Key", apiKey);
+        }
+        return httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    /**
      * Starts sending metrics to the dashboard at fixed intervals.
      *
      * @param metricsSupplier a supplier of current metrics
@@ -121,15 +138,7 @@ public class DashboardClient {
             payload.put("testDuration", config.getTestDuration().toMillis());
 
             String jsonPayload = objectMapper.writeValueAsString(payload);
-
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(dashboardUrl + "/api/tests/register"))
-                    .header("Content-Type", "application/json")
-                    .header("X-API-Key", apiKey)
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
-                    .build();
-
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = postJson("/api/tests/register", jsonPayload);
 
             if (response.statusCode() != 200 && response.statusCode() != 201) {
                 log.error("Failed to register test with dashboard: {} - {}",
@@ -186,15 +195,7 @@ public class DashboardClient {
             }
 
             String jsonPayload = objectMapper.writeValueAsString(payload);
-
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(dashboardUrl + "/api/metrics/update"))
-                    .header("Content-Type", "application/json")
-                    .header("X-API-Key", apiKey)
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
-                    .build();
-
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = postJson("/api/metrics/update", jsonPayload);
 
             if (response.statusCode() != 200 && response.statusCode() != 204) {
                 log.warn("Failed to send metrics update: {} - {}",
@@ -216,15 +217,7 @@ public class DashboardClient {
             payload.put("endTime", System.currentTimeMillis());
 
             String jsonPayload = objectMapper.writeValueAsString(payload);
-
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(dashboardUrl + "/api/tests/finish"))
-                    .header("Content-Type", "application/json")
-                    .header("X-API-Key", apiKey)
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
-                    .build();
-
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = postJson("/api/tests/finish", jsonPayload);
 
             if (response.statusCode() != 200 && response.statusCode() != 204) {
                 log.error("Failed to finish test in dashboard: {} - {}",
@@ -268,15 +261,7 @@ public class DashboardClient {
             payload.put("statusCodes", metrics.getStatusCodeCounts());
 
             String jsonPayload = objectMapper.writeValueAsString(payload);
-
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(dashboardUrl + "/api/tests/result"))
-                    .header("Content-Type", "application/json")
-                    .header("X-API-Key", apiKey)
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
-                    .build();
-
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = postJson("/api/tests/result", jsonPayload);
 
             if (response.statusCode() != 200 && response.statusCode() != 201) {
                 log.error("Failed to send test result to dashboard: {} - {}",
