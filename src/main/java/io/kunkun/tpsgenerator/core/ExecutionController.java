@@ -251,6 +251,13 @@ public class ExecutionController implements java.io.Closeable {
             Thread.sleep(sleepMs);
         }
 
+        // Capture the intended dispatch time BEFORE blocking on the rate limiter.
+        // Starting the latency clock here (rather than inside the worker, after the
+        // permit is granted) is the standard guard against coordinated omission: when
+        // the target slows down the limiter back-pressures this loop, and measuring
+        // from the intended send time keeps that queueing delay in the latency numbers.
+        final long intendedStartNanos = System.nanoTime();
+
         // Pace submission to the target rate. Blocking here — on the single
         // submission loop — rather than inside each worker means virtual threads
         // are spawned only as fast as the rate limiter allows, so the number of
@@ -259,16 +266,21 @@ public class ExecutionController implements java.io.Closeable {
         double rateLimiterWaitSeconds = rateLimiter.acquire();
         metricsCollector.recordRateLimiterWait(rateLimiterWaitSeconds);
 
+        // Expected inter-request interval at the current target rate, used by HDR's
+        // coordinated-omission correction to synthesise the samples a stall swallowed.
+        double currentRate = rateLimiter.getRate();
+        final long expectedIntervalNanos = currentRate > 0 ? (long) (1_000_000_000L / currentRate) : 0L;
+
         long requestId = requestCounter.incrementAndGet();
         final boolean recordLatency = warmupComplete.get();
 
         resourceManager.getExecutor().submit(() -> {
             long requestStartTime = System.currentTimeMillis();
             long elapsedTime = requestStartTime - testStartTime;
-            long nanoStart = System.nanoTime();
             requestExecutor.executeRequest(requestId, elapsedTime);
             if (recordLatency) {
-                latencyRecorder.record(System.nanoTime() - nanoStart);
+                latencyRecorder.recordWithExpectedInterval(
+                        System.nanoTime() - intendedStartNanos, expectedIntervalNanos);
             }
         });
     }

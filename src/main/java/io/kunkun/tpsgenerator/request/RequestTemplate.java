@@ -1,10 +1,12 @@
 package io.kunkun.tpsgenerator.request;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import io.kunkun.tpsgenerator.config.Constants;
 import lombok.Data;
 
 import java.net.URI;
 import java.net.http.HttpRequest;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -66,9 +68,12 @@ public class RequestTemplate {
         // so that URI.create() does not throw on illegal characters ({ and }).
         String url = encodeUnresolvedPlaceholders(replaceParameters(urlTemplate, parameters));
 
-        // Build request
+        // Build request. A per-request timeout makes the JDK client cancel the exchange and
+        // release the connection on timeout (CompletableFuture.orTimeout does NOT — it just
+        // completes the future while the socket leaks in the background).
         HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-                .uri(URI.create(url));
+                .uri(URI.create(url))
+                .timeout(Duration.ofSeconds(Constants.DEFAULT_REQUEST_TIMEOUT_SECONDS));
 
         // Set method and body if present
         String body = bodyTemplate != null ? replaceParameters(bodyTemplate, parameters) : "";

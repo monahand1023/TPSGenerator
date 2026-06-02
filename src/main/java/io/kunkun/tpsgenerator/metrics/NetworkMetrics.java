@@ -4,6 +4,7 @@ import lombok.Getter;
 import org.HdrHistogram.Histogram;
 
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -170,17 +171,17 @@ public class NetworkMetrics {
     public static long estimateResponseSize(HttpResponse<String> response) {
         long size = 0;
 
-        // Add body size
+        // Add body size (explicit UTF-8 so byte counts are deterministic across locales)
         String body = response.body();
         if (body != null) {
-            size += body.getBytes().length;
+            size += body.getBytes(StandardCharsets.UTF_8).length;
         }
 
         // Add headers size (key + values)
         for (Map.Entry<String, List<String>> entry : response.headers().map().entrySet()) {
-            size += entry.getKey().getBytes().length;
+            size += entry.getKey().getBytes(StandardCharsets.UTF_8).length;
             for (String value : entry.getValue()) {
-                size += value.getBytes().length;
+                size += value.getBytes(StandardCharsets.UTF_8).length;
             }
         }
 

@@ -3,13 +3,15 @@ package io.kunkun.tpsgenerator.metrics;
 import io.kunkun.tpsgenerator.config.Constants;
 import lombok.Data;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Collects TPS (transactions per second) metrics over time.
- * Thread-safe for concurrent access.
+ * Thread-safe for concurrent access (all access is synchronized on the deque;
+ * samples are recorded at ~1 Hz so contention is negligible).
  */
 public class TpsMetrics {
 
@@ -24,9 +26,10 @@ public class TpsMetrics {
     private final int maxSamples;
 
     /**
-     * TPS samples over time.
+     * TPS samples over time. An {@link ArrayDeque} ring buffer — evicting the oldest is
+     * O(1) ({@code pollFirst}), unlike {@code List.remove(0)} which copies the whole backing array.
      */
-    private final List<TpsSample> samples = new CopyOnWriteArrayList<>();
+    private final Deque<TpsSample> samples = new ArrayDeque<>();
 
     /**
      * Creates a new TpsMetrics with default max samples.
@@ -60,11 +63,12 @@ public class TpsMetrics {
      * @param tps the TPS value
      */
     public void recordTps(long timestamp, long tps) {
-        // Remove oldest sample if at capacity
-        if (samples.size() >= maxSamples) {
-            samples.remove(0);
+        synchronized (samples) {
+            if (samples.size() >= maxSamples) {
+                samples.pollFirst(); // drop oldest — O(1)
+            }
+            samples.addLast(new TpsSample(timestamp, tps));
         }
-        samples.add(new TpsSample(timestamp, tps));
     }
 
     /**
@@ -73,7 +77,9 @@ public class TpsMetrics {
      * @return a copy of all TPS samples
      */
     public List<TpsSample> getSamples() {
-        return new ArrayList<>(samples);
+        synchronized (samples) {
+            return new ArrayList<>(samples);
+        }
     }
 
     /**
@@ -82,7 +88,9 @@ public class TpsMetrics {
      * @return the sample count
      */
     public int getSampleCount() {
-        return samples.size();
+        synchronized (samples) {
+            return samples.size();
+        }
     }
 
     /**
@@ -91,10 +99,9 @@ public class TpsMetrics {
      * @return the maximum TPS, or 0 if no samples
      */
     public long getMaxTps() {
-        return samples.stream()
-                .mapToLong(TpsSample::getTps)
-                .max()
-                .orElse(0);
+        synchronized (samples) {
+            return samples.stream().mapToLong(TpsSample::getTps).max().orElse(0);
+        }
     }
 
     /**
@@ -103,10 +110,9 @@ public class TpsMetrics {
      * @return the minimum TPS, or 0 if no samples
      */
     public long getMinTps() {
-        return samples.stream()
-                .mapToLong(TpsSample::getTps)
-                .min()
-                .orElse(0);
+        synchronized (samples) {
+            return samples.stream().mapToLong(TpsSample::getTps).min().orElse(0);
+        }
     }
 
     /**
@@ -115,10 +121,9 @@ public class TpsMetrics {
      * @return the average TPS, or 0 if no samples
      */
     public double getAverageTps() {
-        return samples.stream()
-                .mapToLong(TpsSample::getTps)
-                .average()
-                .orElse(0);
+        synchronized (samples) {
+            return samples.stream().mapToLong(TpsSample::getTps).average().orElse(0);
+        }
     }
 
     /**
@@ -127,17 +132,19 @@ public class TpsMetrics {
      * @return the most recent TPS, or 0 if no samples
      */
     public long getCurrentTps() {
-        if (samples.isEmpty()) {
-            return 0;
+        synchronized (samples) {
+            TpsSample last = samples.peekLast();
+            return last != null ? last.getTps() : 0;
         }
-        return samples.get(samples.size() - 1).getTps();
     }
 
     /**
      * Resets all samples.
      */
     public void reset() {
-        samples.clear();
+        synchronized (samples) {
+            samples.clear();
+        }
     }
 
     /**

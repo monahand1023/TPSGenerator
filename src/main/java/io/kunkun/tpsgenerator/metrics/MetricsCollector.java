@@ -175,14 +175,10 @@ public class MetricsCollector implements Closeable {
      * @param e the exception
      */
     public void recordError(long requestId, Exception e) {
-        // Stop tracking the request
-        RequestTracker.RequestInfo info = requestTracker.stopTracking(requestId);
-
-        if (info != null) {
-            // Calculate response time
-            long responseTime = System.currentTimeMillis() - info.getStartTime();
-            testMetrics.recordResponseTime(responseTime);
-        }
+        // Stop tracking the request. We intentionally do NOT fold the failure latency into
+        // the response-time percentile histogram — a transport error's "duration" is not a
+        // meaningful service latency and would skew p99/max for successful traffic.
+        requestTracker.stopTracking(requestId);
 
         // Record error
         testMetrics.incrementFailureCount();
@@ -202,8 +198,9 @@ public class MetricsCollector implements Closeable {
         // Stop tracking the request
         requestTracker.stopTracking(requestId);
 
-        // Record response time
-        testMetrics.recordResponseTime(responseTime);
+        // Note: the timeout's elapsed time (responseTime) is deliberately NOT recorded into
+        // the response-time percentile histogram — a 30s timeout sample would dominate p99/max
+        // and misrepresent the latency of requests the server actually answered.
 
         // Record timeout
         testMetrics.incrementTimeoutCount();

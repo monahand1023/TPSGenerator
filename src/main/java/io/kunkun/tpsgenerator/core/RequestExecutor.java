@@ -9,9 +9,10 @@ import lombok.extern.slf4j.Slf4j;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -158,17 +159,15 @@ public class RequestExecutor {
             long startTime = System.currentTimeMillis();
             metricsCollector.recordRequestStart(requestId, request);
 
-            // Execute request with timeout
+            // Execute request. The per-request HttpRequest.timeout() (set in RequestTemplate)
+            // bounds the whole exchange and, unlike CompletableFuture.orTimeout, actually
+            // cancels it and releases the connection on timeout.
             CompletableFuture<HttpResponse<String>> responseFuture = httpClient.sendAsync(
                     request, HttpResponse.BodyHandlers.ofString());
 
-            // Add timeout to the request
-            CompletableFuture<HttpResponse<String>> timeoutFuture = responseFuture.orTimeout(
-                    30, TimeUnit.SECONDS);
-
             try {
                 // Wait for the response
-                HttpResponse<String> response = timeoutFuture.join();
+                HttpResponse<String> response = responseFuture.join();
 
                 // Calculate response time
                 long endTime = System.currentTimeMillis();
@@ -221,12 +220,18 @@ public class RequestExecutor {
         long endTime = System.currentTimeMillis();
         long responseTime = endTime - startTime;
 
-        if (e instanceof TimeoutException) {
+        // join() wraps the real cause in a CompletionException — unwrap it so a JDK
+        // HttpTimeoutException is classified as a timeout, not a generic error.
+        Throwable cause = (e instanceof CompletionException && e.getCause() != null)
+                ? e.getCause() : e;
+
+        if (cause instanceof HttpTimeoutException || cause instanceof TimeoutException) {
             log.warn("Request {} timed out after {} ms", requestId, responseTime);
             metricsCollector.recordTimeout(requestId, responseTime);
         } else {
-            log.warn("Request {} failed: {}", requestId, e.getMessage());
-            metricsCollector.recordError(requestId, e);
+            log.warn("Request {} failed: {}", requestId, cause.getMessage());
+            Exception toRecord = (cause instanceof Exception) ? (Exception) cause : e;
+            metricsCollector.recordError(requestId, toRecord);
         }
 
         // Update circuit breaker

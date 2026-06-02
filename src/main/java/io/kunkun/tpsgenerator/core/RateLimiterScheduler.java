@@ -87,7 +87,10 @@ public class RateLimiterScheduler {
 
     private void tick() {
         try {
-            long elapsedTimeMs = System.currentTimeMillis() - metricsCollector.getStartTime();
+            // Guard against a not-yet-set start time (the first tick fires at delay 0 on a
+            // different thread): treat a zero/unset start as elapsed=0 rather than epoch-millis.
+            long startTime = metricsCollector.getStartTime();
+            long elapsedTimeMs = startTime > 0 ? System.currentTimeMillis() - startTime : 0L;
             double targetTps = trafficPattern.getTpsAtTime(elapsedTimeMs, totalDurationMs);
             rateLimiter.setRate(targetTps);
 

@@ -108,6 +108,47 @@ class LatencyRecorderAdapterTest {
                 "All 1 ms recordings should yield p50 ≈ 1.000 ms");
     }
 
+    @Test
+    @DisplayName("getLatencyStats() is non-destructive — repeated calls return the same data")
+    void getLatencyStatsIsNonDestructive() {
+        LatencyRecorderAdapter adapter = new LatencyRecorderAdapter(true);
+        for (int i = 1; i <= 1000; i++) {
+            adapter.record(i * 1_000L);
+        }
+
+        LatencyStats first = adapter.getLatencyStats();
+        LatencyStats second = adapter.getLatencyStats();
+
+        // Before the fix, the second call drained the recorder and returned all zeros.
+        assertTrue(second.getP99Ms() > 0, "second call should still report data");
+        assertEquals(first.getP50Ms(), second.getP50Ms(), 1e-9, "p50 stable across calls");
+        assertEquals(first.getP99Ms(), second.getP99Ms(), 1e-9, "p99 stable across calls");
+        assertEquals(first.getMaxMs(), second.getMaxMs(), 1e-9, "max stable across calls");
+    }
+
+    @Test
+    @DisplayName("recordWithExpectedInterval() synthesises extra samples for a long stall (CO correction)")
+    void recordWithExpectedIntervalSynthesisesSamples() {
+        LatencyRecorderAdapter corrected = new LatencyRecorderAdapter(true);
+        LatencyRecorderAdapter plain = new LatencyRecorderAdapter(true);
+
+        // One 100 ms observation against a 1 ms expected interval. Coordinated-omission
+        // correction back-fills the ~99 missing samples (100ms, 99ms, … 1ms), pulling the
+        // mean far below the single observed value; plain recording leaves mean == 100ms.
+        long oneHundredMsNanos = TimeUnit.MILLISECONDS.toNanos(100);
+        long oneMsNanos = TimeUnit.MILLISECONDS.toNanos(1);
+        corrected.recordWithExpectedInterval(oneHundredMsNanos, oneMsNanos);
+        plain.record(oneHundredMsNanos);
+
+        LatencyStats correctedStats = corrected.getLatencyStats();
+        LatencyStats plainStats = plain.getLatencyStats();
+
+        assertEquals(100.0, plainStats.getMeanMs(), 1.0, "plain recording keeps mean at the observed value");
+        assertTrue(correctedStats.getMeanMs() < plainStats.getMeanMs(),
+                "CO correction should lower the mean by synthesising the swallowed samples");
+        assertEquals(100.0, correctedStats.getMaxMs(), 1.0, "max should still be the observed 100 ms");
+    }
+
     // -------------------------------------------------------------------------
     // When recording is disabled
     // -------------------------------------------------------------------------

@@ -11,8 +11,9 @@ import java.lang.management.MemoryMXBean;
 import java.lang.management.OperatingSystemMXBean;
 import java.lang.management.ThreadMXBean;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Deque;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -39,7 +40,9 @@ public class ResourceMonitor implements Closeable {
     });
 
     private final AtomicBoolean running = new AtomicBoolean(false);
-    private final List<ResourceSnapshot> snapshots = Collections.synchronizedList(new ArrayList<>());
+    // ArrayDeque ring buffer guarded by its own monitor: evicting the oldest snapshot is
+    // O(1) (pollFirst) instead of the array-copy that List.remove(0) incurs.
+    private final Deque<ResourceSnapshot> snapshots = new ArrayDeque<>();
     private final OperatingSystemMXBean osMXBean;
     private final MemoryMXBean memoryMXBean;
     private final ThreadMXBean threadMXBean;
@@ -96,7 +99,11 @@ public class ResourceMonitor implements Closeable {
         }
         if (wasRunning) {
             scheduler.shutdownNow();
-            log.info("Stopped resource monitoring, collected {} snapshots", snapshots.size());
+            int count;
+            synchronized (snapshots) {
+                count = snapshots.size();
+            }
+            log.info("Stopped resource monitoring, collected {} snapshots", count);
         }
     }
 
@@ -153,9 +160,9 @@ public class ResourceMonitor implements Closeable {
                     return;
                 }
                 if (snapshots.size() >= MAX_SNAPSHOTS) {
-                    snapshots.remove(0);
+                    snapshots.pollFirst();
                 }
-                snapshots.add(snapshot);
+                snapshots.addLast(snapshot);
             }
 
             // Update max values
@@ -197,6 +204,8 @@ public class ResourceMonitor implements Closeable {
      * @return the resource snapshots
      */
     public List<ResourceSnapshot> getSnapshots() {
-        return new ArrayList<>(snapshots);
+        synchronized (snapshots) {
+            return new ArrayList<>(snapshots);
+        }
     }
 }

@@ -2,7 +2,6 @@ package io.kunkun.tpsgenerator.request.parameter;
 
 import lombok.AllArgsConstructor;
 
-import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -51,7 +50,6 @@ public abstract class RandomParameterSource implements ParameterSource {
         private final double stdDev;
         private final double min;
         private final double max;
-        private final Random random = new Random();
 
         /**
          * Creates a new normal distribution source.
@@ -73,7 +71,7 @@ public abstract class RandomParameterSource implements ParameterSource {
             // Generate a value from a normal distribution
             double value;
             do {
-                value = random.nextGaussian() * stdDev + mean;
+                value = ThreadLocalRandom.current().nextGaussian() * stdDev + mean;
             } while (value < min || value >= max);
 
             // Return as integer or with one decimal place
@@ -98,7 +96,6 @@ public abstract class RandomParameterSource implements ParameterSource {
         private final int minLength;
         private final int maxLength;
         private final String charset;
-        private final Random random = new Random();
 
         private static final String LOWERCASE = "abcdefghijklmnopqrstuvwxyz";
         private static final String UPPERCASE = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -150,7 +147,7 @@ public abstract class RandomParameterSource implements ParameterSource {
 
             StringBuilder sb = new StringBuilder(length);
             for (int i = 0; i < length; i++) {
-                int index = random.nextInt(charset.length());
+                int index = ThreadLocalRandom.current().nextInt(charset.length());
                 sb.append(charset.charAt(index));
             }
 
@@ -169,7 +166,6 @@ public abstract class RandomParameterSource implements ParameterSource {
      */
     public static class RandomSelectionSource extends RandomParameterSource {
         private final String[] values;
-        private final Random random = new Random();
 
         /**
          * Creates a new random selection source.
@@ -185,7 +181,7 @@ public abstract class RandomParameterSource implements ParameterSource {
 
         @Override
         public String getValue() {
-            int index = random.nextInt(values.length);
+            int index = ThreadLocalRandom.current().nextInt(values.length);
             return values[index];
         }
 

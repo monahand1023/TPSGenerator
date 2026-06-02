@@ -48,6 +48,13 @@ public class CircuitBreaker {
     private final AtomicReference<Double> cachedErrorRate = new AtomicReference<>(0.0);
 
     /**
+     * Running count of failures currently in the window. Maintained incrementally so
+     * {@link #recordResult(boolean)} is O(1) instead of re-summing the whole window
+     * on every request (a serialization hot spot at high TPS). Guarded by the write lock.
+     */
+    private long failureCount = 0;
+
+    /**
      * The time when the circuit breaker was opened.
      */
     private volatile Instant openTime;
@@ -88,10 +95,20 @@ public class CircuitBreaker {
     public void recordResult(boolean success) {
         lock.writeLock().lock();
         try {
+            // Maintain failureCount incrementally: if the window is full the head is
+            // about to be evicted, so subtract it before adding the new result.
+            if (results.isAtFullCapacity()) {
+                Boolean evicted = results.peek();
+                if (evicted != null && !evicted) {
+                    failureCount--;
+                }
+            }
             results.add(success);
+            if (!success) {
+                failureCount++;
+            }
 
-            // Calculate and cache the error rate
-            double errorRate = calculateErrorRate();
+            double errorRate = results.isEmpty() ? 0.0 : (double) failureCount / results.size();
             cachedErrorRate.set(errorRate);
 
             // Only check the circuit state if we have enough data
@@ -101,27 +118,6 @@ public class CircuitBreaker {
         } finally {
             lock.writeLock().unlock();
         }
-    }
-
-    /**
-     * Calculates the current error rate from the results queue.
-     * Must be called while holding a lock.
-     *
-     * @return the error rate (0.0 - 1.0)
-     */
-    private double calculateErrorRate() {
-        if (results.isEmpty()) {
-            return 0.0;
-        }
-
-        long failureCount = 0;
-        for (Boolean result : results) {
-            if (!result) {
-                failureCount++;
-            }
-        }
-
-        return (double) failureCount / results.size();
     }
 
     /**
@@ -157,6 +153,7 @@ public class CircuitBreaker {
         lock.writeLock().lock();
         try {
             results.clear();
+            failureCount = 0;
             cachedErrorRate.set(0.0);
             if (isOpen.compareAndSet(true, false)) {
                 log.info("Circuit breaker manually reset to closed state");

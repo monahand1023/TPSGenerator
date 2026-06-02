@@ -21,30 +21,16 @@
         </encoder>
     </appender>
 
-    <!-- Configure loggers -->
-    <logger name="com.example.tpsgenerator" level="INFO" />
-
-    <!-- Performance-critical packages -->
-    <logger name="com.example.tpsgenerator.core" level="INFO" />
-    <logger name="com.example.tpsgenerator.request" level="INFO" />
+    <!-- Application loggers (this is a plain java -jar CLI; the package is io.kunkun.tpsgenerator,
+         not com.example.* — the old names matched nothing so log-level tuning silently did nothing). -->
+    <logger name="io.kunkun.tpsgenerator" level="INFO" />
 
     <!-- Third-party libraries -->
     <logger name="org.apache.http" level="WARN" />
-    <logger name="com.zaxxer.hikari" level="WARN" />
-    <logger name="org.hibernate" level="WARN" />
 
     <!-- Root logger -->
     <root level="INFO">
         <appender-ref ref="CONSOLE" />
         <appender-ref ref="FILE" />
     </root>
-
-    <!-- Configuration for different environments -->
-    <springProfile name="development">
-        <logger name="com.example.tpsgenerator" level="DEBUG" />
-    </springProfile>
-
-    <springProfile name="production">
-        <logger name="com.example.tpsgenerator" level="INFO" />
-    </springProfile>
 </configuration>

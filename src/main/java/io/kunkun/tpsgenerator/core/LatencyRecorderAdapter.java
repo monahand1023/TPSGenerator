@@ -30,6 +30,14 @@ public class LatencyRecorderAdapter {
     private final Recorder recorder;
 
     /**
+     * Accumulated histogram that persists across {@link #getLatencyStats()} calls.
+     * {@link Recorder#getIntervalHistogram()} resets the active recorder, so without
+     * accumulating here a second call to getLatencyStats() would return all zeros
+     * (every interval read drains the recorder).
+     */
+    private final Histogram accumulated;
+
+    /**
      * Creates a new adapter.
      *
      * @param enabled {@code true} to record latency values; {@code false} to
@@ -39,6 +47,9 @@ public class LatencyRecorderAdapter {
         this.enabled = enabled;
         this.recorder = enabled
                 ? new Recorder(MAX_TRACKABLE_US, SIGNIFICANT_DIGITS)
+                : null;
+        this.accumulated = enabled
+                ? new Histogram(MAX_TRACKABLE_US, SIGNIFICANT_DIGITS)
                 : null;
     }
 
@@ -51,6 +62,29 @@ public class LatencyRecorderAdapter {
     public void record(long nanos) {
         if (enabled) {
             recorder.recordValue(nanos / 1_000);
+        }
+    }
+
+    /**
+     * Records a latency observation with coordinated-omission correction. When the
+     * observed latency exceeds {@code expectedIntervalNanos}, HdrHistogram synthesises
+     * the additional samples that "should" have been issued during the stall, so a
+     * slow target can no longer hide behind an under-issuing load generator.
+     *
+     * @param nanos                 observed end-to-end latency in nanoseconds
+     * @param expectedIntervalNanos expected inter-request interval in nanoseconds
+     *                              (0 to disable correction for this sample)
+     */
+    public void recordWithExpectedInterval(long nanos, long expectedIntervalNanos) {
+        if (!enabled) {
+            return;
+        }
+        long valueUs = nanos / 1_000;
+        long expectedUs = expectedIntervalNanos / 1_000;
+        if (expectedUs > 0) {
+            recorder.recordValueWithExpectedInterval(valueUs, expectedUs);
+        } else {
+            recorder.recordValue(valueUs);
         }
     }
 
@@ -79,7 +113,10 @@ public class LatencyRecorderAdapter {
         if (!enabled || recorder == null) {
             return new LatencyStats(0.0, 0.0, 0.0, 0.0, 0.0);
         }
-        Histogram h = recorder.getIntervalHistogram();
+        // Drain the recorder's interval into the persistent accumulator so repeated
+        // calls remain correct (and additive) rather than destructive.
+        accumulated.add(recorder.getIntervalHistogram());
+        Histogram h = accumulated;
         if (h.getTotalCount() == 0) {
             return new LatencyStats(0.0, 0.0, 0.0, 0.0, 0.0);
         }

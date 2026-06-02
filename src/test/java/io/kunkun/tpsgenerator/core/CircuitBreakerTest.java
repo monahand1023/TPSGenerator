@@ -120,6 +120,26 @@ class CircuitBreakerTest {
     }
 
     @Test
+    @DisplayName("Sliding window evicts old failures correctly (incremental failure count)")
+    void slidingWindowEvictsFailures() {
+        // Threshold 1.0 so the circuit never opens (1.0 > 1.0 is false) and we can observe
+        // the rate cycle as the window fills with failures then is fully replaced by successes.
+        CircuitBreaker cb = new CircuitBreaker(1.0, 5);
+
+        for (int i = 0; i < 5; i++) {
+            cb.recordResult(false);
+        }
+        assertEquals(1.0, cb.getCurrentErrorRate(), 0.01, "window full of failures");
+
+        for (int i = 0; i < 5; i++) {
+            cb.recordResult(true);
+        }
+        assertEquals(0.0, cb.getCurrentErrorRate(), 0.01,
+                "all failures should have been evicted as successes slid in");
+        assertFalse(cb.isOpen());
+    }
+
+    @Test
     @DisplayName("Should be thread-safe under concurrent access")
     void shouldBeThreadSafe() throws InterruptedException {
         CircuitBreaker cb = new CircuitBreaker(0.5, 100);

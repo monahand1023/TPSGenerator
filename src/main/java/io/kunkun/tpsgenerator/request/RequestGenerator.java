@@ -9,8 +9,8 @@ import java.net.http.HttpRequest;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 /**
@@ -23,7 +23,6 @@ public class RequestGenerator {
     private final Map<String, ParameterSource> parameterSources = new ConcurrentHashMap<>();
     private final int[] templateWeights;
     private final int totalWeight;
-    private final Random random = new Random();
 
     /**
      * Creates a new RequestGenerator.
@@ -98,7 +97,14 @@ public class RequestGenerator {
             return requestTemplates.get(0);
         }
 
-        int randomWeight = random.nextInt(totalWeight);
+        // Guard against all-zero weights, which would make nextInt(0) throw and cause
+        // every request to be silently skipped. Fall back to uniform selection.
+        if (totalWeight <= 0) {
+            return requestTemplates.get(
+                    ThreadLocalRandom.current().nextInt(requestTemplates.size()));
+        }
+
+        int randomWeight = ThreadLocalRandom.current().nextInt(totalWeight);
         for (int i = 0; i < templateWeights.length; i++) {
             if (randomWeight < templateWeights[i]) {
                 return requestTemplates.get(i);
