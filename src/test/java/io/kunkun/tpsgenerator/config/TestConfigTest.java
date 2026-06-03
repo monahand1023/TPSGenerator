@@ -201,6 +201,31 @@ class TestConfigTest {
     }
 
     @Test
+    @DisplayName("scenario step without a request is rejected")
+    void scenarioStepWithoutRequestThrows() {
+        TestConfig.ScenarioStep step = new TestConfig.ScenarioStep();
+        step.setName("bad"); // no request
+        config.setScenario(java.util.List.of(step));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> config.validate());
+        assertTrue(ex.getMessage().contains("scenario step"), ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("scenario-only config (no requestTemplates) validates")
+    void scenarioOnlyConfigValidates() {
+        TestConfig.ScenarioStep step = new TestConfig.ScenarioStep();
+        RequestTemplate r = new RequestTemplate();
+        r.setMethod("GET");
+        r.setUrlTemplate("http://example.com/step");
+        step.setRequest(r);
+        config.setScenario(java.util.List.of(step));
+        config.setRequestTemplates(null);
+
+        assertDoesNotThrow(() -> config.validate());
+    }
+
+    @Test
     @DisplayName("rampUp without rampDuration is rejected (would NPE in the factory)")
     void rampUpWithoutRampDurationThrows() {
         TestConfig.TrafficConfig t = new TestConfig.TrafficConfig();

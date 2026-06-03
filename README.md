@@ -382,6 +382,50 @@ Read values from a CSV file column:
 }
 ```
 
+## Scenarios (Chained / Correlated Requests)
+
+For multi-step user journeys, define a `scenario` instead of (or alongside) `requestTemplates`. Each
+rate-limited slot starts a **session** that runs the steps in order on one virtual thread, threading a
+context through them. A step can **extract** values from its response (regex capture group, or a
+header) into the context; later steps reference them as `${vars}`. In scenario mode the target TPS is
+the **session start rate**, and a failed step aborts that session.
+
+```json
+{
+  "name": "login-then-fetch",
+  "targetServiceUrl": "http://localhost:8080",
+  "testDuration": "1m",
+  "trafficPattern": { "type": "stable", "targetTps": 20 },
+  "scenario": [
+    {
+      "name": "login",
+      "request": {
+        "method": "POST",
+        "urlTemplate": "http://localhost:8080/login",
+        "bodyTemplate": "{\"user\":\"u${userId}\"}"
+      },
+      "extract": [
+        { "name": "token", "from": "body", "expr": "\"token\":\"([^\"]+)\"" }
+      ]
+    },
+    {
+      "name": "fetch",
+      "request": {
+        "method": "GET",
+        "urlTemplate": "http://localhost:8080/data",
+        "headers": { "Authorization": "Bearer ${token}" }
+      },
+      "thinkTimeMs": 250
+    }
+  ],
+  "parameterSources": { "userId": { "type": "random", "range": [1, 1000] } }
+}
+```
+
+- `extract[].from`: `body` (the `expr` is a regex and capture group 1 is taken) or `header` (the `expr` is the header name).
+- Steps may use any context value: default params (`${requestId}`, `${timestamp}`), parameter-source values, and anything extracted by earlier steps.
+- `thinkTimeMs` pauses after a step, simulating user think time.
+
 ## Metrics and Reports
 
 TPS Generator collects comprehensive metrics during test execution:

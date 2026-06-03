@@ -100,8 +100,28 @@ public class TestConfig {
             }
         }
 
-        if (requestTemplates == null || requestTemplates.isEmpty()) {
+        boolean hasScenario = scenario != null && !scenario.isEmpty();
+        if (!hasScenario && (requestTemplates == null || requestTemplates.isEmpty())) {
             throw new IllegalArgumentException("At least one request template is required");
+        }
+
+        if (hasScenario) {
+            for (ScenarioStep step : scenario) {
+                if (step.getRequest() == null
+                        || step.getRequest().getMethod() == null
+                        || step.getRequest().getUrlTemplate() == null) {
+                    throw new IllegalArgumentException(
+                            "Each scenario step requires a request with method and urlTemplate");
+                }
+                if (step.getExtract() != null) {
+                    for (ExtractRule rule : step.getExtract()) {
+                        if (rule.getName() == null || rule.getName().isBlank() || rule.getExpr() == null) {
+                            throw new IllegalArgumentException(
+                                    "Each scenario extract rule requires a name and an expr");
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -163,6 +183,15 @@ public class TestConfig {
      * JSON key: {@code "sla"}.
      */
     private SlaConfig sla;
+
+    /**
+     * Optional multi-step scenario. When present, the engine runs sessions (one per rate-limited
+     * slot): each session executes these steps in order on a single virtual thread, threading a
+     * context map through them. Values extracted from a response (see {@link ExtractRule}) become
+     * {@code ${vars}} usable by later steps. In scenario mode the target TPS is the session-start
+     * rate. JSON key: {@code "scenario"}.
+     */
+    private List<ScenarioStep> scenario;
 
     /**
      * Duration of the warm-up phase at the start of the test.
@@ -419,6 +448,36 @@ public class TestConfig {
          * Window size for error rate calculation.
          */
         private int windowSize = 100;
+    }
+
+    /**
+     * One step of a multi-step scenario: an HTTP request plus optional value extractions and a
+     * think-time pause afterward. The request's templates may reference {@code ${vars}} from the
+     * session context (default params, parameter sources, and values extracted by earlier steps).
+     */
+    @Data
+    public static class ScenarioStep {
+        /** Human-readable step name. */
+        private String name;
+        /** The request to send (method, urlTemplate, headers, bodyTemplate; weight is ignored). */
+        private RequestTemplate request;
+        /** Values to extract from the response into the session context for later steps. */
+        private List<ExtractRule> extract;
+        /** Pause (ms) after this step before the next, simulating user think time. */
+        private long thinkTimeMs = 0;
+    }
+
+    /**
+     * A rule for extracting a value from a response into the session context.
+     */
+    @Data
+    public static class ExtractRule {
+        /** Context variable name to populate (referenced as ${name} by later steps). */
+        private String name;
+        /** Source of the value: {@code body} (regex, capture group 1) or {@code header}. */
+        private String from = "body";
+        /** For {@code body}: a regex whose group 1 is captured. For {@code header}: the header name. */
+        private String expr;
     }
 
     /**

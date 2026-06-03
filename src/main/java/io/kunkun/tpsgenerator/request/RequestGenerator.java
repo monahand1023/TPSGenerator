@@ -30,7 +30,9 @@ public class RequestGenerator {
      * @param config the test configuration
      */
     public RequestGenerator(TestConfig config) {
-        this.requestTemplates = config.getRequestTemplates();
+        // Null-safe: a scenario-only config may omit requestTemplates entirely.
+        this.requestTemplates = config.getRequestTemplates() != null
+                ? config.getRequestTemplates() : java.util.List.of();
 
         // Initialize parameter sources using factory
         for (Map.Entry<String, TestConfig.ParameterSourceConfig> entry :
@@ -116,13 +118,15 @@ public class RequestGenerator {
     }
 
     /**
-     * Generates parameter values.
+     * Generates parameter values (default params + values from each parameter source).
+     * Public so the scenario engine can seed a per-session context that is then threaded through
+     * the steps (with values extracted from responses added on top).
      *
      * @param requestId the request ID
      * @param elapsedTimeMs the elapsed time since test start in milliseconds
      * @return the parameter values
      */
-    private Map<String, String> generateParameters(long requestId, long elapsedTimeMs) {
+    public Map<String, String> generateParameters(long requestId, long elapsedTimeMs) {
         Map<String, String> parameters = new HashMap<>();
 
         // Add default parameters

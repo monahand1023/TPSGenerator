@@ -18,6 +18,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import javax.net.ssl.SSLSession;
@@ -142,6 +143,44 @@ class ExecutionControllerTest {
     }
 
     @Test
+    @DisplayName("scenario extracts a value from one response and uses it in the next step")
+    void scenarioChainsExtractedValue() throws Exception {
+        TestConfig config = config(Duration.ofMillis(300), 5);
+        config.setRequestTemplates(null); // scenario-only
+
+        TestConfig.ScenarioStep login = new TestConfig.ScenarioStep();
+        login.setName("login");
+        RequestTemplate loginReq = new RequestTemplate();
+        loginReq.setMethod("GET");
+        loginReq.setUrlTemplate("http://example.com/login");
+        login.setRequest(loginReq);
+        TestConfig.ExtractRule rule = new TestConfig.ExtractRule();
+        rule.setName("token");
+        rule.setFrom("body");
+        rule.setExpr("\"token\":\"([^\"]+)\"");
+        login.setExtract(List.of(rule));
+
+        TestConfig.ScenarioStep fetch = new TestConfig.ScenarioStep();
+        fetch.setName("fetch");
+        RequestTemplate fetchReq = new RequestTemplate();
+        fetchReq.setMethod("GET");
+        fetchReq.setUrlTemplate("http://example.com/data?t=${token}");
+        fetch.setRequest(fetchReq);
+
+        config.setScenario(List.of(login, fetch));
+
+        MetricsCollector metrics = new MetricsCollector(config);
+        RecordingHttpClient client = new RecordingHttpClient("{\"token\":\"abc123\"}");
+
+        try (ExecutionController controller = new ExecutionController(config, metrics, client)) {
+            controller.execute();
+        }
+
+        assertTrue(client.uris.stream().anyMatch(u -> u.contains("/data?t=abc123")),
+                "second step should use the token extracted from step one; saw " + client.uris);
+    }
+
+    @Test
     @DisplayName("close() after a completed run does not throw")
     void closeIsSafe() throws Exception {
         TestConfig config = config(Duration.ofMillis(150), 50);
@@ -197,6 +236,53 @@ class ExecutionControllerTest {
             @Override public URI uri() { return URI.create("http://example.com"); }
             @Override public HttpClient.Version version() { return HttpClient.Version.HTTP_1_1; }
         };
+    }
+
+    /** HttpClient stub that records every request URI and returns 200 with a fixed body. */
+    private static final class RecordingHttpClient extends HttpClient {
+        final CopyOnWriteArrayList<String> uris = new CopyOnWriteArrayList<>();
+        private final String body;
+
+        RecordingHttpClient(String body) {
+            this.body = body;
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> CompletableFuture<HttpResponse<T>> sendAsync(
+                HttpRequest request, HttpResponse.BodyHandler<T> responseBodyHandler) {
+            uris.add(request.uri().toString());
+            HttpResponse<String> resp = new HttpResponse<>() {
+                @Override public int statusCode() { return 200; }
+                @Override public HttpRequest request() { return request; }
+                @Override public Optional<HttpResponse<String>> previousResponse() { return Optional.empty(); }
+                @Override public HttpHeaders headers() { return HttpHeaders.of(Collections.emptyMap(), (a, b) -> true); }
+                @Override public String body() { return body; }
+                @Override public Optional<SSLSession> sslSession() { return Optional.empty(); }
+                @Override public URI uri() { return request.uri(); }
+                @Override public HttpClient.Version version() { return Version.HTTP_1_1; }
+            };
+            return (CompletableFuture<HttpResponse<T>>) (CompletableFuture<?>) CompletableFuture.completedFuture(resp);
+        }
+
+        @Override
+        public <T> CompletableFuture<HttpResponse<T>> sendAsync(
+                HttpRequest request, HttpResponse.BodyHandler<T> h, HttpResponse.PushPromiseHandler<T> p) {
+            return sendAsync(request, h);
+        }
+
+        @Override public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> h) {
+            throw new UnsupportedOperationException("Use sendAsync");
+        }
+        @Override public Optional<java.net.Authenticator> authenticator() { return Optional.empty(); }
+        @Override public Optional<java.net.CookieHandler> cookieHandler() { return Optional.empty(); }
+        @Override public Optional<Duration> connectTimeout() { return Optional.empty(); }
+        @Override public Redirect followRedirects() { return Redirect.NEVER; }
+        @Override public Optional<java.net.ProxySelector> proxy() { return Optional.empty(); }
+        @Override public javax.net.ssl.SSLContext sslContext() { return null; }
+        @Override public javax.net.ssl.SSLParameters sslParameters() { return null; }
+        @Override public Optional<java.util.concurrent.Executor> executor() { return Optional.empty(); }
+        @Override public Version version() { return Version.HTTP_1_1; }
     }
 
     /** Concrete HttpClient stub (Mockito cannot mock the sealed JDK HttpClient on recent JDKs). */

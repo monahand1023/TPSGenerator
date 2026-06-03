@@ -132,51 +132,60 @@ public class RequestExecutor {
      * @param elapsedTimeMs the time elapsed since the start of the test
      */
     public void executeRequest(long requestId, long elapsedTimeMs) {
-        try {
-            // Rate limiting and warm-up pacing happen on the submission loop
-            // (see ExecutionController); this method runs on a virtual thread
-            // and is responsible only for issuing the request and recording the
-            // outcome.
+        // Rate limiting and warm-up pacing happen on the submission loop (see ExecutionController);
+        // this method runs on a virtual thread and only issues the request and records the outcome.
 
-            // Check circuit breaker if enabled
+        // Check circuit breaker if enabled (skip without generating to avoid wasted work)
+        if (circuitBreaker != null && !circuitBreaker.allowRequest()) {
+            log.debug("Circuit breaker open, skipping request {}", requestId);
+            metricsCollector.recordSkippedRequest(requestId);
+            return;
+        }
+
+        // Generate request
+        HttpRequest request;
+        try {
+            request = requestGenerator.generateRequest(requestId, elapsedTimeMs);
+        } catch (RequestGenerationException e) {
+            log.warn("Failed to generate request {}: {}", requestId, e.getMessage());
+            metricsCollector.recordSkippedRequest(requestId);
+            return;
+        }
+
+        executeRequest(requestId, request);
+    }
+
+    /**
+     * Executes a pre-built HTTP request, records its outcome, and returns the response (or
+     * {@code null} on failure/skip). Used by both the standard per-request path and the scenario
+     * engine, which needs the response body to extract values for subsequent steps.
+     *
+     * @param requestId the request ID
+     * @param request   the request to send
+     * @return the HTTP response, or {@code null} if the request was skipped or failed
+     */
+    public HttpResponse<String> executeRequest(long requestId, HttpRequest request) {
+        try {
             if (circuitBreaker != null && !circuitBreaker.allowRequest()) {
                 log.debug("Circuit breaker open, skipping request {}", requestId);
                 metricsCollector.recordSkippedRequest(requestId);
-                return;
+                return null;
             }
 
-            // Generate request
-            HttpRequest request;
-            try {
-                request = requestGenerator.generateRequest(requestId, elapsedTimeMs);
-            } catch (RequestGenerationException e) {
-                log.warn("Failed to generate request {}: {}", requestId, e.getMessage());
-                metricsCollector.recordSkippedRequest(requestId);
-                return;
-            }
-
-            // Record request start
             long startTime = System.currentTimeMillis();
             metricsCollector.recordRequestStart(requestId, request);
 
-            // Execute request. The per-request HttpRequest.timeout() (set in RequestTemplate)
-            // bounds the whole exchange and, unlike CompletableFuture.orTimeout, actually
-            // cancels it and releases the connection on timeout.
+            // The per-request HttpRequest.timeout() (set in RequestTemplate) bounds the whole
+            // exchange and, unlike CompletableFuture.orTimeout, cancels it and releases the
+            // connection on timeout.
             CompletableFuture<HttpResponse<String>> responseFuture = httpClient.sendAsync(
                     request, HttpResponse.BodyHandlers.ofString());
 
             try {
-                // Wait for the response
                 HttpResponse<String> response = responseFuture.join();
+                long responseTime = System.currentTimeMillis() - startTime;
 
-                // Calculate response time
-                long endTime = System.currentTimeMillis();
-                long responseTime = endTime - startTime;
-
-                // Determine success based on status code
                 boolean isSuccess = response.statusCode() >= 200 && response.statusCode() < 300;
-
-                // Apply response validation if configured
                 if (isSuccess && responseValidator != null) {
                     ResponseValidator.ValidationResult validationResult = responseValidator.validate(response);
                     if (!validationResult.isValid()) {
@@ -185,28 +194,24 @@ public class RequestExecutor {
                     }
                 }
 
-                // Record response with the validation-aware verdict so a 2xx that fails
-                // validation is counted once, as a failure.
+                // Validation-aware verdict so a 2xx that fails validation is counted once, as a failure.
                 metricsCollector.recordResponse(requestId, response, responseTime, isSuccess);
-
-                // Update circuit breaker
                 if (circuitBreaker != null) {
                     circuitBreaker.recordResult(isSuccess);
                 }
-
                 if (log.isDebugEnabled()) {
                     log.debug("Request {} completed with status {}, took {} ms",
                             requestId, response.statusCode(), responseTime);
                 }
-
+                return response;
             } catch (Exception e) {
-                // Handle request failure
                 handleRequestFailure(requestId, startTime, e);
+                return null;
             }
-
         } catch (Exception e) {
             log.error("Error executing request {}", requestId, e);
             metricsCollector.recordError(requestId, e);
+            return null;
         }
     }
 

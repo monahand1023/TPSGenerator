@@ -15,7 +15,11 @@ import com.google.common.util.concurrent.RateLimiter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -47,6 +51,9 @@ public class ExecutionController implements java.io.Closeable {
 
     /** Optional live-dashboard reporter; non-null only when dashboard reporting is enabled. */
     private volatile DashboardClient dashboardClient;
+
+    /** True when a multi-step scenario is configured; each rate-limited slot runs a session. */
+    private final boolean scenarioMode;
 
     private final AtomicBoolean testRunning = new AtomicBoolean(false);
     private final AtomicBoolean warmupComplete = new AtomicBoolean(false);
@@ -97,6 +104,7 @@ public class ExecutionController implements java.io.Closeable {
 
         this.resourceManager = new ExecutionResourceManager(config);
         this.requestGenerator = new RequestGenerator(config);
+        this.scenarioMode = config.getScenario() != null && !config.getScenario().isEmpty();
 
         if (config.getCircuitBreaker() != null && config.getCircuitBreaker().isEnabled()) {
             this.circuitBreaker = new CircuitBreaker(
@@ -370,9 +378,16 @@ public class ExecutionController implements java.io.Closeable {
         double currentRate = rateLimiter.getRate();
         final long expectedIntervalNanos = currentRate > 0 ? (long) (1_000_000_000L / currentRate) : 0L;
 
-        long requestId = requestCounter.incrementAndGet();
         final boolean recordLatency = warmupComplete.get();
 
+        // Scenario mode: each rate-limited slot starts a multi-step session on its own thread.
+        if (scenarioMode) {
+            resourceManager.getExecutor().submit(
+                    () -> runScenario(requestExecutor, testStartTime, expectedIntervalNanos, recordLatency));
+            return;
+        }
+
+        long requestId = requestCounter.incrementAndGet();
         resourceManager.getExecutor().submit(() -> {
             // Clock starts at actual send time (after the pace wait): this is service latency.
             long serviceStartNanos = System.nanoTime();
@@ -384,6 +399,79 @@ public class ExecutionController implements java.io.Closeable {
                         System.nanoTime() - serviceStartNanos, expectedIntervalNanos);
             }
         });
+    }
+
+    /**
+     * Runs one scenario session: executes the configured steps in order on this thread, threading
+     * a context map through them. Each step builds its request from the context (so {@code ${vars}}
+     * resolve to default params, parameter-source values, and values extracted by earlier steps),
+     * records the request like any other, then extracts values and applies the step's think time.
+     * A failed or unbuildable step aborts the session (later steps depend on it).
+     */
+    private void runScenario(RequestExecutor requestExecutor, long testStartTime,
+                             long expectedIntervalNanos, boolean recordLatency) {
+        long elapsed = System.currentTimeMillis() - testStartTime;
+        Map<String, String> context = new HashMap<>(
+                requestGenerator.generateParameters(requestCounter.incrementAndGet(), elapsed));
+
+        for (TestConfig.ScenarioStep step : config.getScenario()) {
+            long stepRequestId = requestCounter.incrementAndGet();
+            HttpRequest request;
+            try {
+                request = step.getRequest().generate(context);
+            } catch (Exception e) {
+                log.debug("Scenario step '{}' could not be built: {}", step.getName(), e.getMessage());
+                metricsCollector.recordSkippedRequest(stepRequestId);
+                break;
+            }
+
+            long serviceStartNanos = System.nanoTime();
+            HttpResponse<String> response = requestExecutor.executeRequest(stepRequestId, request);
+            if (recordLatency) {
+                metricsCollector.recordEndToEndLatency(
+                        System.nanoTime() - serviceStartNanos, expectedIntervalNanos);
+            }
+
+            if (response == null) {
+                break; // step failed/skipped — abort the session, later steps depend on it
+            }
+            applyExtractions(step, response, context);
+
+            long think = step.getThinkTimeMs();
+            if (think > 0) {
+                try {
+                    Thread.sleep(think);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
+    }
+
+    /** Applies a step's extraction rules, populating the session context for subsequent steps. */
+    private void applyExtractions(TestConfig.ScenarioStep step, HttpResponse<String> response,
+                                  Map<String, String> context) {
+        if (step.getExtract() == null) {
+            return;
+        }
+        for (TestConfig.ExtractRule rule : step.getExtract()) {
+            try {
+                String value;
+                if ("header".equalsIgnoreCase(rule.getFrom())) {
+                    value = response.headers().firstValue(rule.getExpr()).orElse(null);
+                } else {
+                    String body = response.body() == null ? "" : response.body();
+                    java.util.regex.Matcher m = java.util.regex.Pattern.compile(rule.getExpr()).matcher(body);
+                    value = (m.find() && m.groupCount() >= 1) ? m.group(1) : null;
+                }
+                if (value != null) {
+                    context.put(rule.getName(), value);
+                }
+            } catch (Exception e) {
+                log.debug("Scenario extraction '{}' failed: {}", rule.getName(), e.getMessage());
+            }
+        }
     }
 
     private TestResult completeTest(long testStartTime) throws InterruptedException {
