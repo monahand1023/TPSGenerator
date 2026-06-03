@@ -142,7 +142,7 @@ This will create a runnable JAR file in the `target` directory.
 
 ### Docker
 
-A published image is available from GitHub Container Registry:
+A public image is available from GitHub Container Registry — no login required to pull:
 
 ```bash
 docker pull ghcr.io/monahand1023/tpsgenerator:latest
@@ -167,7 +167,8 @@ docker build -t tps-generator .
 To drive load against the [mock server](https://github.com/monahand1023/TPSGenerator-Server)
 with a single command, see the `docker compose --profile demo` setup in that repo. Images are
 published automatically by `.github/workflows/docker-publish.yml` on every push to `main` and
-on `v*` tags.
+on `v*` tags. The package is **public**, so anyone can `docker pull` it without authenticating;
+both `linux/amd64` and `linux/arm64` are built.
 
 ### Configuration
 
