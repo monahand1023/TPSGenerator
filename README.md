@@ -658,6 +658,25 @@ The codebase includes several performance optimizations:
 - **Centralized constants**: All magic numbers are centralized in the Constants class for easy configuration
 - **Proper resource cleanup**: ExecutionController implements Closeable with shutdown hooks for graceful cleanup
 
+## Distributed Load Generation
+
+To generate more load than one machine can, run the tool on N nodes and **merge** their results.
+Each node runs the same config at `targetTps / N`; afterwards combine the JSON result files:
+
+```bash
+# on each node (e.g. 4 nodes, each at 1/4 of the total target TPS):
+java -jar tps-generator.jar config.json results-nodeA
+# ... nodeB, nodeC, nodeD ...
+
+# then merge the per-node JSON results into one combined report:
+java -jar tps-generator.jar merge combined.json \
+    results-nodeA/*.json results-nodeB/*.json results-nodeC/*.json results-nodeD/*.json
+```
+
+Merging is mathematically correct: counts and offered TPS are summed, and latency percentiles are
+recomputed from the **merged HdrHistogram** (each run exports its encoded histogram in the JSON), not
+by averaging percentiles. The merged document has the same shape and can itself be merged further.
+
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.

@@ -4,11 +4,13 @@ import io.kunkun.tpsgenerator.config.Constants;
 import io.kunkun.tpsgenerator.config.FlexibleDurationDeserializer;
 import io.kunkun.tpsgenerator.config.TestConfig;
 import io.kunkun.tpsgenerator.core.ExecutionController;
+import io.kunkun.tpsgenerator.metrics.DistributedMerger;
 import io.kunkun.tpsgenerator.metrics.LatencyStats;
 import io.kunkun.tpsgenerator.metrics.LiveStatusReporter;
 import io.kunkun.tpsgenerator.metrics.MetricsCollector;
 import io.kunkun.tpsgenerator.metrics.RunComparator;
 import io.kunkun.tpsgenerator.metrics.TestMetrics;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import io.kunkun.tpsgenerator.metrics.exporter.CSVExporter;
 import io.kunkun.tpsgenerator.metrics.exporter.JsonExporter;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -46,6 +48,12 @@ public class TPSGeneratorApplication {
         // Subcommand: compare two prior JSON result files for regression gating.
         if ("compare".equalsIgnoreCase(args[0])) {
             runComparison(args);
+            return;
+        }
+
+        // Subcommand: merge JSON result files from independent (distributed) runs.
+        if ("merge".equalsIgnoreCase(args[0])) {
+            runMerge(args);
             return;
         }
 
@@ -236,6 +244,43 @@ public class TPSGeneratorApplication {
             System.out.println("\nNo regressions beyond thresholds.");
         } catch (Exception e) {
             log.error("Comparison failed", e);
+            System.exit(1);
+        }
+    }
+
+    /**
+     * Handles the {@code merge} subcommand: combines result files from independent (distributed)
+     * runs into one document with summed counts and merged-histogram percentiles.
+     * Usage: {@code merge <output.json> <run1.json> <run2.json> [...]}
+     */
+    private static void runMerge(String[] args) {
+        if (args.length < 3) {
+            System.out.println("Usage: java -jar tps-generator.jar merge <output.json> "
+                    + "<run1.json> <run2.json> [...]");
+            System.exit(1);
+            return;
+        }
+        try {
+            ObjectMapper mapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+            List<java.util.Map<String, Object>> runs = new ArrayList<>();
+            for (int i = 2; i < args.length; i++) {
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Object> run = mapper.readValue(new File(args[i]), java.util.Map.class);
+                runs.add(run);
+            }
+
+            java.util.Map<String, Object> merged = DistributedMerger.merge(runs);
+            mapper.writeValue(new File(args[1]), merged);
+
+            System.out.println("\n=== Merged " + runs.size() + " runs -> " + args[1] + " ===");
+            System.out.println("Total Requests: " + merged.get("totalRequests"));
+            System.out.println("Success Rate:   " + merged.get("successRate"));
+            System.out.println("Combined TPS:   " + merged.get("averageTps"));
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> lat = (java.util.Map<String, Object>) merged.get("latency");
+            System.out.println("p50/p95/p99 ms: " + lat.get("p50Ms") + "/" + lat.get("p95Ms") + "/" + lat.get("p99Ms"));
+        } catch (Exception e) {
+            log.error("Merge failed", e);
             System.exit(1);
         }
     }

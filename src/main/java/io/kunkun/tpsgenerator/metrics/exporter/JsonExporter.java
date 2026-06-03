@@ -115,6 +115,8 @@ public class JsonExporter {
         latency.put("p99Ms",  round3(latencyStats.getP99Ms()));
         latency.put("maxMs",  round3(latencyStats.getMaxMs()));
         latency.put("meanMs", round3(latencyStats.getMeanMs()));
+        // Encoded HDR histogram so independent node runs can be merged exactly (see `merge`).
+        latency.put("histogram", metrics.getResponseTimeMetrics().getEncodedHistogram());
         root.put("latency", latency);
 
         return root;

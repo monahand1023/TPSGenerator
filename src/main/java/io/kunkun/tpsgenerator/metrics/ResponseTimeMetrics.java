@@ -173,6 +173,11 @@ public class ResponseTimeMetrics {
         return snapshot.getTotalCount() > 0 ? snapshot.getMaxValue() : 0;
     }
 
+    /** Returns the latest response-time snapshot encoded as a base64 string (for cross-run merging). */
+    public String getEncodedHistogram() {
+        return HistogramCodec.encode(responseTimeSnapshot);
+    }
+
     /**
      * Gets the mean response time from the latest snapshot.
      *
