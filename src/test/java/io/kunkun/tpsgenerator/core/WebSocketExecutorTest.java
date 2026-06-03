@@ -24,4 +24,11 @@ class WebSocketExecutorTest {
         WebSocketExecutor ex = new WebSocketExecutor(HttpClient.newHttpClient(), "http://localhost:1", 2);
         assertFalse(ex.exchange("ping"));
     }
+
+    @Test
+    @DisplayName("toWebSocketUri rejects a null/blank URL")
+    void toWebSocketUriRejectsNullOrBlank() {
+        assertThrows(IllegalArgumentException.class, () -> WebSocketExecutor.toWebSocketUri(null));
+        assertThrows(IllegalArgumentException.class, () -> WebSocketExecutor.toWebSocketUri("  "));
+    }
 }

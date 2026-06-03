@@ -87,6 +87,18 @@ class JsonExporterTest {
     }
 
     @Test
+    @DisplayName("exportResults: latency includes a decodable encoded histogram (for merge)")
+    void exportResultsIncludesEncodedHistogram() throws IOException {
+        File output = tempDir.resolve("histogram.json").toFile();
+        exporter.exportResults("test", metrics, latencyStats, output);
+        JsonNode latency = mapper.readTree(output).path("latency");
+
+        assertTrue(latency.has("histogram"), "latency should include the encoded histogram");
+        // Must round-trip through the codec the distributed `merge` feature relies on.
+        assertDoesNotThrow(() -> HistogramCodec.decode(latency.path("histogram").asText()));
+    }
+
+    @Test
     @DisplayName("exportResults: latency values match LatencyStats input")
     void exportResultsLatencyValuesCorrect() throws IOException {
         File output = tempDir.resolve("latency_vals.json").toFile();

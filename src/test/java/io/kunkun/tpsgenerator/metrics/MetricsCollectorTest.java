@@ -215,6 +215,36 @@ class MetricsCollectorTest {
         assertEquals(1L, collector.getTestMetrics().getSkippedCount());
     }
 
+    // -------- non-HTTP (WebSocket) recording --------
+
+    @Test
+    @DisplayName("recordRequestStart(id): increments total without counting network bytes")
+    void recordRequestStartNoHttpIncrementsTotalOnly() {
+        collector.start();
+        collector.recordRequestStart(1L);
+        assertEquals(1L, collector.getTestMetrics().getTotalRequests());
+        assertEquals(0L, collector.getNetworkMetrics().getTotalBytesSent());
+    }
+
+    @Test
+    @DisplayName("recordOutcome: increments success/failure")
+    void recordOutcomeCounts() {
+        collector.start();
+        collector.recordOutcome(true);
+        collector.recordOutcome(false);
+        assertEquals(1L, collector.getTestMetrics().getSuccessCount());
+        assertEquals(1L, collector.getTestMetrics().getFailureCount());
+    }
+
+    @Test
+    @DisplayName("recordEndToEndLatency: feeds the response-time histogram (ns -> ms)")
+    void recordEndToEndLatencyFeedsHistogram() {
+        collector.start();
+        collector.recordEndToEndLatency(50_000_000L, 0L); // 50 ms, no CO correction
+        collector.getTestMetrics().updateHistogramSnapshots();
+        assertTrue(collector.getTestMetrics().getResponseTimePercentile(50) >= 49);
+    }
+
     // -------- getCurrentTps --------
 
     @Test

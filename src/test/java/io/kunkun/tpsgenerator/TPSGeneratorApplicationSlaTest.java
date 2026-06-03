@@ -49,6 +49,19 @@ class TPSGeneratorApplicationSlaTest {
     }
 
     @Test
+    @DisplayName("p50 over budget is reported")
+    void p50BreachDetected() {
+        TestConfig c = new TestConfig();
+        TestConfig.SlaConfig sla = new TestConfig.SlaConfig();
+        sla.setMaxP50Ms(5);
+        c.setSla(sla);
+
+        List<String> breaches = TPSGeneratorApplication.evaluateSlaBreaches(c, latency(10, 20, 30), metrics());
+        assertEquals(1, breaches.size());
+        assertTrue(breaches.get(0).contains("p50"), breaches.get(0));
+    }
+
+    @Test
     @DisplayName("success rate under budget is reported")
     void successRateBreachDetected() {
         TestConfig c = new TestConfig();

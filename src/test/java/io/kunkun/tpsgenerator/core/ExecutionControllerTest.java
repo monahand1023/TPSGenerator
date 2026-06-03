@@ -139,6 +139,8 @@ class ExecutionControllerTest {
 
         try (ExecutionController controller = new ExecutionController(config, metrics, client)) {
             assertDoesNotThrow(controller::execute);
+            assertTrue(metrics.getTestMetrics().getTotalRequests() > 0,
+                    "ramp-from-zero should still issue traffic once the rate climbs");
         }
     }
 
@@ -178,6 +180,43 @@ class ExecutionControllerTest {
 
         assertTrue(client.uris.stream().anyMatch(u -> u.contains("/data?t=abc123")),
                 "second step should use the token extracted from step one; saw " + client.uris);
+    }
+
+    @Test
+    @DisplayName("scenario can extract a value from a response header and use it downstream")
+    void scenarioChainsExtractedHeader() throws Exception {
+        TestConfig config = config(Duration.ofMillis(300), 5);
+        config.setRequestTemplates(null);
+
+        TestConfig.ScenarioStep step1 = new TestConfig.ScenarioStep();
+        step1.setName("auth");
+        RequestTemplate r1 = new RequestTemplate();
+        r1.setMethod("GET");
+        r1.setUrlTemplate("http://example.com/auth");
+        step1.setRequest(r1);
+        TestConfig.ExtractRule rule = new TestConfig.ExtractRule();
+        rule.setName("tok");
+        rule.setFrom("header");
+        rule.setExpr("X-Token");
+        step1.setExtract(List.of(rule));
+
+        TestConfig.ScenarioStep step2 = new TestConfig.ScenarioStep();
+        step2.setName("use");
+        RequestTemplate r2 = new RequestTemplate();
+        r2.setMethod("GET");
+        r2.setUrlTemplate("http://example.com/data?h=${tok}");
+        step2.setRequest(r2);
+
+        config.setScenario(List.of(step1, step2));
+
+        MetricsCollector metrics = new MetricsCollector(config);
+        RecordingHttpClient client = new RecordingHttpClient("{}"); // header X-Token: hdr-tok-7
+
+        try (ExecutionController controller = new ExecutionController(config, metrics, client)) {
+            controller.execute();
+        }
+        assertTrue(client.uris.stream().anyMatch(u -> u.contains("/data?h=hdr-tok-7")),
+                "second step should use the header value extracted from step one; saw " + client.uris);
     }
 
     @Test
@@ -276,7 +315,9 @@ class ExecutionControllerTest {
                 @Override public int statusCode() { return 200; }
                 @Override public HttpRequest request() { return request; }
                 @Override public Optional<HttpResponse<String>> previousResponse() { return Optional.empty(); }
-                @Override public HttpHeaders headers() { return HttpHeaders.of(Collections.emptyMap(), (a, b) -> true); }
+                @Override public HttpHeaders headers() {
+                    return HttpHeaders.of(java.util.Map.of("X-Token", List.of("hdr-tok-7")), (a, b) -> true);
+                }
                 @Override public String body() { return body; }
                 @Override public Optional<SSLSession> sslSession() { return Optional.empty(); }
                 @Override public URI uri() { return request.uri(); }

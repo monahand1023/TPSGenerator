@@ -142,6 +142,42 @@ class RequestExecutorTest {
         assertEquals(1L, metricsCollector.getTestMetrics().getFailureCount());
     }
 
+    // -------- executeRequest(id, HttpRequest) overload (scenario engine relies on the return) --------
+
+    @Test
+    @DisplayName("executeRequest(id, request) returns the response on success")
+    void overloadReturnsResponseOnSuccess() {
+        StubHttpClient client = StubHttpClient.returning(response(200, "OK"));
+        HttpRequest req = HttpRequest.newBuilder(URI.create("http://example.com/api")).GET().build();
+
+        HttpResponse<String> resp = buildExecutor(client, null, null).executeRequest(10L, req);
+
+        assertNotNull(resp);
+        assertEquals(200, resp.statusCode());
+        assertEquals(1L, metricsCollector.getTestMetrics().getSuccessCount());
+    }
+
+    @Test
+    @DisplayName("executeRequest(id, request) returns null on failure")
+    void overloadReturnsNullOnFailure() {
+        StubHttpClient client = StubHttpClient.failing(new RuntimeException("boom"));
+        HttpRequest req = HttpRequest.newBuilder(URI.create("http://example.com/api")).GET().build();
+
+        assertNull(buildExecutor(client, null, null).executeRequest(11L, req));
+        assertEquals(1L, metricsCollector.getTestMetrics().getFailureCount());
+    }
+
+    @Test
+    @DisplayName("HttpTimeoutException is classified as a timeout, not a generic error")
+    void timeoutExceptionClassifiedAsTimeout() {
+        StubHttpClient client = StubHttpClient.failing(new java.net.http.HttpTimeoutException("timed out"));
+
+        buildExecutor(client, null, null).executeRequest(12L, 0L);
+
+        assertEquals(1L, metricsCollector.getTestMetrics().getTimeoutCount());
+        assertEquals(1L, metricsCollector.getTestMetrics().getFailureCount());
+    }
+
     // -------- helpers --------
 
     private HttpResponse<String> response(int statusCode, String body) {

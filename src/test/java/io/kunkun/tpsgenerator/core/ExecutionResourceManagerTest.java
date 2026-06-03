@@ -46,6 +46,24 @@ class ExecutionResourceManagerTest {
     }
 
     @Test
+    @DisplayName("builds and runs with no threadPool config (threadPool is optional under virtual threads)")
+    void worksWithoutThreadPoolConfig() throws Exception {
+        TestConfig noPool = minimalConfig();
+        noPool.setThreadPool(null);
+
+        ExecutionResourceManager m = new ExecutionResourceManager(noPool);
+        try {
+            assertNotNull(m.getExecutor());
+            CountDownLatch ran = new CountDownLatch(1);
+            m.getExecutor().submit(ran::countDown);
+            assertTrue(ran.await(2, TimeUnit.SECONDS), "submitted task should run");
+        } finally {
+            m.shutdownGracefully(1, TimeUnit.SECONDS);
+            m.removeShutdownHook();
+        }
+    }
+
+    @Test
     @DisplayName("getScheduler() returns a non-null ScheduledExecutorService")
     void getSchedulerIsNotNull() {
         assertNotNull(manager.getScheduler());

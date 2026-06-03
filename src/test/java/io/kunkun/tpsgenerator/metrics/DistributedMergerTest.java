@@ -54,4 +54,25 @@ class DistributedMergerTest {
     void emptyInputThrows() {
         assertThrows(IllegalArgumentException.class, () -> DistributedMerger.merge(List.of()));
     }
+
+    @Test
+    void mergesWithoutHistograms_zeroLatencyAndSummedTimeouts() {
+        Map<String, Object> a = new LinkedHashMap<>();
+        a.put("totalRequests", 10L);
+        a.put("successCount", 8L);
+        a.put("failureCount", 2L);
+        a.put("timeoutCount", 1L);
+        a.put("averageTps", 5.0);
+        a.put("durationSeconds", 2.0);
+        Map<String, Object> b = new LinkedHashMap<>(a);
+        b.put("timeoutCount", 3L);
+
+        Map<String, Object> merged = DistributedMerger.merge(List.of(a, b));
+
+        assertEquals(20L, ((Number) merged.get("totalRequests")).longValue());
+        assertEquals(4L, ((Number) merged.get("timeoutCount")).longValue());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> latency = (Map<String, Object>) merged.get("latency");
+        assertEquals(0, ((Number) latency.get("p95Ms")).intValue(), "no histograms => zero latency");
+    }
 }
