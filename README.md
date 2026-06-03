@@ -175,7 +175,7 @@ Here's a sample configuration:
       "name": "getResource",
       "weight": 70,
       "method": "GET",
-      "urlTemplate": "http://localhost:8080/resources",
+      "urlTemplate": "http://localhost:8080/api/resources",
       "headers": {
         "Authorization": "Bearer token123",
         "Accept": "application/json"
@@ -185,7 +185,7 @@ Here's a sample configuration:
       "name": "createResource",
       "weight": 30,
       "method": "POST",
-      "urlTemplate": "http://localhost:8080/orders",
+      "urlTemplate": "http://localhost:8080/api/orders",
       "headers": {
         "Content-Type": "application/json",
         "Authorization": "Bearer token123"
@@ -415,7 +415,7 @@ the **session start rate**, and a failed step aborts that session.
       "name": "login",
       "request": {
         "method": "POST",
-        "urlTemplate": "http://localhost:8080/login",
+        "urlTemplate": "http://localhost:8080/api/auth/login",
         "bodyTemplate": "{\"user\":\"u${userId}\"}"
       },
       "extract": [
@@ -426,7 +426,7 @@ the **session start rate**, and a failed step aborts that session.
       "name": "fetch",
       "request": {
         "method": "GET",
-        "urlTemplate": "http://localhost:8080/data",
+        "urlTemplate": "http://localhost:8080/api/data",
         "headers": { "Authorization": "Bearer ${token}" }
       },
       "thinkTimeMs": 250

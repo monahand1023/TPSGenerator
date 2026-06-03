@@ -22,7 +22,7 @@
       "name": "getUser",
       "weight": 70,
       "method": "GET",
-      "urlTemplate": "http://api.example.com/users/${userId}",
+      "urlTemplate": "http://api.example.com/api/users/${userId}",
       "headers": {
         "Authorization": "Bearer ${authToken}",
         "Accept": "application/json"
@@ -32,7 +32,7 @@
       "name": "createOrder",
       "weight": 30,
       "method": "POST",
-      "urlTemplate": "http://api.example.com/orders",
+      "urlTemplate": "http://api.example.com/api/orders",
       "headers": {
         "Content-Type": "application/json",
         "Authorization": "Bearer ${authToken}"
