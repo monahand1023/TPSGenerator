@@ -52,15 +52,21 @@ TPS Generator is a Java-based load testing tool designed to generate controlled 
 
 ## Features
 
-- **Virtual-Thread Concurrency (Java 21 / Project Loom)**: Each in-flight request runs on its own lightweight virtual thread, so the generator scales to tens of thousands of concurrent requests without thread-pool tuning. Offered load is governed by the rate limiter and traffic pattern — in-flight count settles at roughly `TPS × latency` (Little's Law) instead of being capped by a fixed worker pool.
-- **Flexible Traffic Patterns**: Configure stable, ramp-up, spike, or custom traffic patterns
-- **Parameterized Requests**: Create dynamic requests with values from files or random generators
-- **Comprehensive Metrics Collection**: Measure response times, success rates, TPS, and more
-- **Resource Monitoring**: Track CPU, memory, and thread usage during tests
-- **Real-time Monitoring**: View test progress and metrics as the test runs
-- **Dashboard Integration**: Visualize results with customizable dashboards
-- **Circuit Breaker Protection**: Automatically stop tests when error rates exceed thresholds
-- **Detailed Reports**: Export results to CSV for analysis
+- **Virtual-Thread Concurrency (Java 21 / Project Loom)**: Each in-flight request runs on its own lightweight virtual thread; in-flight count settles at roughly `TPS × latency` (Little's Law) rather than being capped by a fixed worker pool. An optional `submissionThreads` shards the pacing loop for very high target TPS.
+- **Flexible Traffic Patterns**: stable, ramp-up, spike, or custom (CSV) patterns
+- **Coordinated-Omission-Correct Latency**: single HdrHistogram pipeline with `recordValueWithExpectedInterval`, so a slow target can't hide behind an under-issuing generator
+- **Parameterized Requests**: values from files or random generators (uniform / normal / selection)
+- **Chained / Correlated Scenarios**: multi-step sessions that extract values from one response (regex/header) and use them in the next, with think-time
+- **WebSocket Load Driver**: `protocol: websocket` for WS round-trip load (gRPC not supported)
+- **Response Validation**: optional status/body/size assertions that count as failures
+- **SLA Assertions**: pass/fail latency/throughput/success-rate budgets that set the exit code (CI gate)
+- **Run Comparison**: `compare` two result files and fail on regression
+- **Distributed Aggregation**: each run exports its encoded histogram; `merge` combines N node runs with correct percentile math
+- **Per-Request Timeouts**: real `HttpRequest.timeout()` that cancels the exchange (no leaked connections)
+- **Circuit Breaker Protection**: O(1) sliding-window breaker that stops a run on excessive errors
+- **Comprehensive Metrics**: response times, success/TPS (offered vs achieved), status codes, network, CPU/memory/threads
+- **Real-time Monitoring**: `--live` in-place status line; optional live dashboard streaming (works with TPSGenerator-Server)
+- **Detailed Reports**: CSV + JSON export (JSON includes the encoded latency histogram)
 
 ## Architecture
 
