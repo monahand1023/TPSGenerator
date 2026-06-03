@@ -44,6 +44,7 @@ In-flight virtual threads settle at roughly `TPS × latency` (Little's Law) — 
     - [Resource Monitoring](#resource-monitoring)
 - [Testing](#testing)
 - [Performance Optimizations](#performance-optimizations)
+- [Benchmark / Sample Run](#benchmark--sample-run)
 - [License](#license)
 
 ## Project Overview
@@ -682,6 +683,51 @@ java -jar tps-generator.jar merge combined.json \
 Merging is mathematically correct: counts and offered TPS are summed, and latency percentiles are
 recomputed from the **merged HdrHistogram** (each run exports its encoded histogram in the JSON), not
 by averaging percentiles. The merged document has the same shape and can itself be merged further.
+
+## Benchmark / Sample Run
+
+A loopback run used to validate the full pipeline (generator → mock server → metrics). The
+[mock HTTP server](../TPSGenerator-Server) and the generator ran on the **same machine**, so these
+numbers measure the tooling end-to-end, not a production target. Treat them as a smoke test of
+sustained throughput and latency accuracy, not a published throughput ceiling.
+
+**Environment**
+
+| | |
+|---|---|
+| Machine | Apple Silicon (Mac16,11), 14 cores, 64 GB RAM |
+| OS / JDK | macOS 26.5, OpenJDK 21.0.11 (virtual threads enabled on the server) |
+| Topology | Generator and mock server on `localhost` (loopback) |
+
+**Config** (`bench.json`): 2,000 TPS stable, 20 s test + 2 s warmup, two weighted templates:
+
+- 70% `GET /users` — mock latency 5–25 ms (lognormal), 0% error rate
+- 30% `POST /orders` — mock latency 10–60 ms (lognormal), 1% error rate
+
+```bash
+java -jar tps-generator.jar bench.json results/
+```
+
+**Results**
+
+| Metric | Value |
+|---|---|
+| Total requests | 40,007 |
+| Success rate | 99.72% (111 failures) |
+| Offered TPS | 1,998 (peak achieved 2,015) |
+| Latency p50 | 12 ms |
+| Latency p95 | 31 ms |
+| Latency p99 | 41 ms |
+| Latency max | 61 ms |
+| Latency mean | 14.7 ms |
+| Load-generator footprint | peak 21.3% CPU, ~643 MB resident (heap ~604 MB) |
+
+The generator held the offered rate (1,998 of 2,000 TPS) for the full window, and the observed
+latency tracks the configured server-side delay distributions: the p99 of 41 ms sits inside the
+10–60 ms `lognormal` band of the slower `/orders` endpoint, and the 0.28% measured error rate
+matches the 1% error rate applied to the 30% of traffic hitting `/orders`. Latencies are HDR
+percentiles with coordinated-omission correction, so they reflect what a closed-loop client would
+have seen rather than only the requests that completed quickly.
 
 ## License
 
