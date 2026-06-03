@@ -58,6 +58,23 @@ public final class Constants {
     // ============== Timeout Configuration ==============
 
     /**
+     * Minimum effective offered rate. Guava's RateLimiter rejects a rate of 0, and — more subtly —
+     * a permit granted at a very low rate pushes the next-permit time ~1/rate seconds into the
+     * future, which a subsequent setRate() does NOT pull back. So a rate well below 1 TPS (e.g. a
+     * ramp's near-zero start) would let exactly one request through and then stall. Flooring to
+     * 1 TPS keeps 1/rate within the ~1s rate-update interval, so ramps and idle periods behave.
+     * Practical limitation: a configured rate below 1 TPS runs at 1 TPS.
+     */
+    public static final double MIN_RATE_LIMITER_TPS = 1.0;
+
+    /**
+     * Maximum time a single submission waits for a rate-limiter permit before returning control to
+     * the loop. Bounding the wait (vs a blocking acquire) lets the loop observe rate updates and the
+     * test-end deadline even when the current rate is very low.
+     */
+    public static final long RATE_LIMITER_ACQUIRE_TIMEOUT_MS = 1000;
+
+    /**
      * Default HTTP connection timeout in seconds.
      */
     public static final int DEFAULT_CONNECT_TIMEOUT_SECONDS = 10;

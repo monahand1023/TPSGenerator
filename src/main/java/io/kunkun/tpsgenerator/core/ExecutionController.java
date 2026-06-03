@@ -90,10 +90,10 @@ public class ExecutionController implements java.io.Closeable {
 
         TrafficPattern trafficPattern = TrafficPatternFactory.create(config.getTrafficPattern());
         double initialTps = trafficPattern.getTpsAtTime(0, config.getTestDuration().toMillis());
-        // Guava's RateLimiter requires a positive rate. A ramp that starts at 0 TPS (or a custom
-        // pattern yielding 0) would otherwise throw at construction; floor non-positive rates to
-        // 1 TPS — the scheduler raises it to the real value within a second.
-        this.rateLimiter = RateLimiter.create(initialTps > 0 ? initialTps : 1.0);
+        // Floor to MIN_RATE_LIMITER_TPS so a ramp that starts at 0 TPS doesn't crash (rate 0) or
+        // stall (a permit at a near-zero rate parks the next one far in the future). See the
+        // constant's javadoc for why the floor must be ~1 TPS.
+        this.rateLimiter = RateLimiter.create(Math.max(initialTps, Constants.MIN_RATE_LIMITER_TPS));
 
         this.resourceManager = new ExecutionResourceManager(config);
         this.requestGenerator = new RequestGenerator(config);
@@ -344,7 +344,17 @@ public class ExecutionController implements java.io.Closeable {
             }
         }
 
-        // Apply think time + jitter between submissions if configured.
+        // Pace submission to the target rate with a BOUNDED wait. A plain blocking acquire() would
+        // park for 1/rate seconds and ignore rate updates and the test-end deadline while parked;
+        // at a very low (e.g. ramp-start) rate that means multi-second stalls. tryAcquire with a
+        // timeout returns control to the loop so it re-checks the deadline and the updated rate.
+        long acquireStartNanos = System.nanoTime();
+        if (!rateLimiter.tryAcquire(Constants.RATE_LIMITER_ACQUIRE_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+            return; // no permit within the bound; caller loop re-evaluates and tries again
+        }
+        metricsCollector.recordRateLimiterWait((System.nanoTime() - acquireStartNanos) / 1_000_000_000.0);
+
+        // Think time + jitter between submissions, if configured (only after we have a permit).
         long thinkTimeMs = config.getThinkTimeMs();
         if (thinkTimeMs > 0) {
             long jitterMs = config.getThinkTimeJitterMs();
@@ -352,12 +362,6 @@ public class ExecutionController implements java.io.Closeable {
                     + (jitterMs > 0 ? ThreadLocalRandom.current().nextLong(jitterMs + 1) : 0);
             Thread.sleep(sleepMs);
         }
-
-        // Pace submission to the target rate. Blocking here — on the submission loop — rather
-        // than inside each worker means virtual threads are spawned only as fast as the rate
-        // limiter allows, so the number of live threads tracks real in-flight load (TPS x latency).
-        double rateLimiterWaitSeconds = rateLimiter.acquire();
-        metricsCollector.recordRateLimiterWait(rateLimiterWaitSeconds);
 
         // Expected inter-request interval at the current target rate. Coordinated omission is
         // corrected by recordValueWithExpectedInterval (HDR back-fills the samples a stalled
