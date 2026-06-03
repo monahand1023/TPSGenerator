@@ -31,6 +31,7 @@ In-flight virtual threads settle at roughly `TPS × latency` (Little's Law) — 
 - [Getting Started](#getting-started)
     - [Prerequisites](#prerequisites)
     - [Building the Project](#building-the-project)
+    - [Docker](#docker)
     - [Configuration](#configuration)
 - [Usage](#usage)
     - [Basic Usage](#basic-usage)
@@ -138,6 +139,35 @@ mvn clean package
 ```
 
 This will create a runnable JAR file in the `target` directory.
+
+### Docker
+
+A published image is available from GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/monahand1023/tpsgenerator:latest
+```
+
+The entrypoint is the generator, so arguments are `<config.json> <output-dir>` (or a
+`compare` / `merge` subcommand). Mount your config in and point at it:
+
+```bash
+docker run --rm -v "$PWD:/work" \
+  ghcr.io/monahand1023/tpsgenerator:latest /work/config.json /work/results
+```
+
+The container's working directory is `/work`, so a bind-mounted directory there receives the
+CSV/JSON results (and the run summary prints to stdout). The image is multi-stage (build with
+Maven + JDK 21, run on a JRE 21 base) and runs as a non-root user. Build it locally with:
+
+```bash
+docker build -t tps-generator .
+```
+
+To drive load against the [mock server](https://github.com/monahand1023/TPSGenerator-Server)
+with a single command, see the `docker compose --profile demo` setup in that repo. Images are
+published automatically by `.github/workflows/docker-publish.yml` on every push to `main` and
+on `v*` tags.
 
 ### Configuration
 
