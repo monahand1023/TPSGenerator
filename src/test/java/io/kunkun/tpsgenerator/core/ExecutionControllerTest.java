@@ -181,6 +181,26 @@ class ExecutionControllerTest {
     }
 
     @Test
+    @DisplayName("websocket protocol wires through and records exchange outcomes")
+    void webSocketModeRecordsExchanges() throws Exception {
+        TestConfig config = config(Duration.ofMillis(250), 20);
+        config.setProtocol("websocket");
+        config.setTargetServiceUrl("http://localhost:1"); // required for websocket mode
+        config.setRequestTemplates(null);
+
+        MetricsCollector metrics = new MetricsCollector(config);
+        // The stub client doesn't support WebSocket, so every exchange fails — which exercises the
+        // websocket branch + outcome recording without needing a WS server, and must not crash.
+        StubHttpClient client = StubHttpClient.returning(response(200, "OK"));
+
+        try (ExecutionController controller = new ExecutionController(config, metrics, client)) {
+            controller.execute();
+            assertTrue(metrics.getTestMetrics().getTotalRequests() > 0);
+            assertTrue(metrics.getTestMetrics().getFailureCount() > 0);
+        }
+    }
+
+    @Test
     @DisplayName("close() after a completed run does not throw")
     void closeIsSafe() throws Exception {
         TestConfig config = config(Duration.ofMillis(150), 50);

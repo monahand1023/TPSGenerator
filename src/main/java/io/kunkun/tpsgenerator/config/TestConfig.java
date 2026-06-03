@@ -100,8 +100,17 @@ public class TestConfig {
             }
         }
 
+        boolean websocket = "websocket".equalsIgnoreCase(protocol);
+        if (protocol != null && !"http".equalsIgnoreCase(protocol) && !websocket) {
+            throw new IllegalArgumentException("protocol must be 'http' or 'websocket'");
+        }
+        if (websocket && (targetServiceUrl == null || targetServiceUrl.isBlank())) {
+            throw new IllegalArgumentException("targetServiceUrl is required for the websocket protocol");
+        }
+
         boolean hasScenario = scenario != null && !scenario.isEmpty();
-        if (!hasScenario && (requestTemplates == null || requestTemplates.isEmpty())) {
+        // HTTP request mode needs templates (or a scenario); websocket mode uses webSocketMessage.
+        if (!hasScenario && !websocket && (requestTemplates == null || requestTemplates.isEmpty())) {
             throw new IllegalArgumentException("At least one request template is required");
         }
 
@@ -183,6 +192,17 @@ public class TestConfig {
      * JSON key: {@code "sla"}.
      */
     private SlaConfig sla;
+
+    /**
+     * Protocol to drive: {@code http} (default) or {@code websocket}. In websocket mode each
+     * rate-limited slot opens a WebSocket to {@link #targetServiceUrl} (http(s) → ws(s)), sends
+     * {@link #webSocketMessage}, awaits one reply, and closes — measuring the round-trip latency.
+     * JSON key: {@code "protocol"}.
+     */
+    private String protocol = "http";
+
+    /** Message sent on each WebSocket exchange (websocket protocol only). JSON key: {@code "webSocketMessage"}. */
+    private String webSocketMessage = "ping";
 
     /**
      * Optional multi-step scenario. When present, the engine runs sessions (one per rate-limited

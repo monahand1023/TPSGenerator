@@ -433,6 +433,27 @@ the **session start rate**, and a failed step aborts that session.
 - Steps may use any context value: default params (`${requestId}`, `${timestamp}`), parameter-source values, and anything extracted by earlier steps.
 - `thinkTimeMs` pauses after a step, simulating user think time.
 
+## WebSocket Load Testing
+
+Set `protocol` to `websocket` to drive a WebSocket endpoint instead of HTTP. Each rate-limited slot
+opens a WebSocket to `targetServiceUrl` (the `http(s)` scheme is converted to `ws(s)`), sends
+`webSocketMessage`, waits for one reply, and closes — recording the round-trip as success/failure
+plus latency.
+
+```json
+{
+  "name": "ws-echo-load",
+  "targetServiceUrl": "http://localhost:8080/ws",
+  "testDuration": "1m",
+  "protocol": "websocket",
+  "webSocketMessage": "ping",
+  "trafficPattern": { "type": "stable", "targetTps": 100 }
+}
+```
+
+> This is a connect-send-receive-close exchange per slot (so it also exercises connection setup);
+> persistent multi-message sessions are not modeled. (gRPC is not yet supported.)
+
 ## Metrics and Reports
 
 TPS Generator collects comprehensive metrics during test execution:

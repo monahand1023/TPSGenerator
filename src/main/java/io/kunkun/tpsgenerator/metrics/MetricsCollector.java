@@ -137,6 +137,30 @@ public class MetricsCollector implements Closeable {
     }
 
     /**
+     * Lightweight request-start for non-HTTP protocols (e.g. WebSocket) that have no HttpRequest.
+     *
+     * @param requestId the request ID
+     */
+    public void recordRequestStart(long requestId) {
+        testMetrics.incrementTotalRequests();
+    }
+
+    /**
+     * Records a non-HTTP exchange outcome (e.g. WebSocket): success/failure + TPS. Latency is
+     * recorded separately via {@link #recordEndToEndLatency}.
+     *
+     * @param success whether the exchange succeeded
+     */
+    public void recordOutcome(boolean success) {
+        if (success) {
+            testMetrics.incrementSuccessCount();
+        } else {
+            testMetrics.incrementFailureCount();
+        }
+        tpsCalculator.incrementRequestCount();
+    }
+
+    /**
      * Records a response to a request.
      *
      * @param requestId the request ID

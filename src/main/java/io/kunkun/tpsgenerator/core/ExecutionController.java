@@ -55,6 +55,9 @@ public class ExecutionController implements java.io.Closeable {
     /** True when a multi-step scenario is configured; each rate-limited slot runs a session. */
     private final boolean scenarioMode;
 
+    /** Non-null when protocol=websocket; each rate-limited slot performs one WS round-trip. */
+    private final WebSocketExecutor webSocketExecutor;
+
     private final AtomicBoolean testRunning = new AtomicBoolean(false);
     private final AtomicBoolean warmupComplete = new AtomicBoolean(false);
     private final AtomicLong requestCounter = new AtomicLong(0);
@@ -105,6 +108,8 @@ public class ExecutionController implements java.io.Closeable {
         this.resourceManager = new ExecutionResourceManager(config);
         this.requestGenerator = new RequestGenerator(config);
         this.scenarioMode = config.getScenario() != null && !config.getScenario().isEmpty();
+        this.webSocketExecutor = "websocket".equalsIgnoreCase(config.getProtocol())
+                ? new WebSocketExecutor(httpClient, config.getTargetServiceUrl()) : null;
 
         if (config.getCircuitBreaker() != null && config.getCircuitBreaker().isEnabled()) {
             this.circuitBreaker = new CircuitBreaker(
@@ -384,6 +389,23 @@ public class ExecutionController implements java.io.Closeable {
         if (scenarioMode) {
             resourceManager.getExecutor().submit(
                     () -> runScenario(requestExecutor, testStartTime, expectedIntervalNanos, recordLatency));
+            return;
+        }
+
+        // WebSocket mode: each slot performs one WS round-trip.
+        if (webSocketExecutor != null) {
+            final String message = config.getWebSocketMessage();
+            long wsRequestId = requestCounter.incrementAndGet();
+            resourceManager.getExecutor().submit(() -> {
+                metricsCollector.recordRequestStart(wsRequestId);
+                long serviceStartNanos = System.nanoTime();
+                boolean ok = webSocketExecutor.exchange(message);
+                metricsCollector.recordOutcome(ok);
+                if (recordLatency) {
+                    metricsCollector.recordEndToEndLatency(
+                            System.nanoTime() - serviceStartNanos, expectedIntervalNanos);
+                }
+            });
             return;
         }
 
