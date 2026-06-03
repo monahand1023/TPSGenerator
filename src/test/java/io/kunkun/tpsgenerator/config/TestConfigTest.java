@@ -201,6 +201,31 @@ class TestConfigTest {
     }
 
     @Test
+    @DisplayName("rampUp without rampDuration is rejected (would NPE in the factory)")
+    void rampUpWithoutRampDurationThrows() {
+        TestConfig.TrafficConfig t = new TestConfig.TrafficConfig();
+        t.setType("rampUp");
+        t.setTargetTps(100);
+        config.setTrafficPattern(t);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> config.validate());
+        assertTrue(ex.getMessage().contains("rampDuration"), ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("spike without spikeDuration is rejected (would NPE in the factory)")
+    void spikeWithoutSpikeDurationThrows() {
+        TestConfig.TrafficConfig t = new TestConfig.TrafficConfig();
+        t.setType("spike");
+        t.setTargetTps(50);
+        t.setSpikeStartTime(Duration.ofSeconds(5));
+        config.setTrafficPattern(t);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> config.validate());
+        assertTrue(ex.getMessage().contains("spikeDuration"), ex.getMessage());
+    }
+
+    @Test
     @DisplayName("Should throw exception for submissionThreads below 1")
     void shouldThrowExceptionForInvalidSubmissionThreads() {
         config.setSubmissionThreads(0);

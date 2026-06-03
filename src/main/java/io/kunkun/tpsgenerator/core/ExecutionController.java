@@ -90,7 +90,10 @@ public class ExecutionController implements java.io.Closeable {
 
         TrafficPattern trafficPattern = TrafficPatternFactory.create(config.getTrafficPattern());
         double initialTps = trafficPattern.getTpsAtTime(0, config.getTestDuration().toMillis());
-        this.rateLimiter = RateLimiter.create(initialTps);
+        // Guava's RateLimiter requires a positive rate. A ramp that starts at 0 TPS (or a custom
+        // pattern yielding 0) would otherwise throw at construction; floor non-positive rates to
+        // 1 TPS — the scheduler raises it to the real value within a second.
+        this.rateLimiter = RateLimiter.create(initialTps > 0 ? initialTps : 1.0);
 
         this.resourceManager = new ExecutionResourceManager(config);
         this.requestGenerator = new RequestGenerator(config);
@@ -316,7 +319,13 @@ public class ExecutionController implements java.io.Closeable {
                 log.warn("Circuit breaker is open, stopping test");
                 break;
             }
-            submitRequest(requestExecutor, testStartTime);
+            try {
+                submitRequest(requestExecutor, testStartTime);
+            } catch (java.util.concurrent.RejectedExecutionException e) {
+                // Executor is shutting down (stop()/SIGTERM raced the loop) — stop submitting cleanly.
+                log.debug("Submission rejected; executor is shutting down, ending submission loop");
+                break;
+            }
         }
     }
 
@@ -344,23 +353,16 @@ public class ExecutionController implements java.io.Closeable {
             Thread.sleep(sleepMs);
         }
 
-        // Capture the intended dispatch time BEFORE blocking on the rate limiter.
-        // Starting the latency clock here (rather than inside the worker, after the
-        // permit is granted) is the standard guard against coordinated omission: when
-        // the target slows down the limiter back-pressures this loop, and measuring
-        // from the intended send time keeps that queueing delay in the latency numbers.
-        final long intendedStartNanos = System.nanoTime();
-
-        // Pace submission to the target rate. Blocking here — on the single
-        // submission loop — rather than inside each worker means virtual threads
-        // are spawned only as fast as the rate limiter allows, so the number of
-        // live threads tracks real in-flight load (TPS x latency) instead of
-        // piling up parked on a permit.
+        // Pace submission to the target rate. Blocking here — on the submission loop — rather
+        // than inside each worker means virtual threads are spawned only as fast as the rate
+        // limiter allows, so the number of live threads tracks real in-flight load (TPS x latency).
         double rateLimiterWaitSeconds = rateLimiter.acquire();
         metricsCollector.recordRateLimiterWait(rateLimiterWaitSeconds);
 
-        // Expected inter-request interval at the current target rate, used by HDR's
-        // coordinated-omission correction to synthesise the samples a stall swallowed.
+        // Expected inter-request interval at the current target rate. Coordinated omission is
+        // corrected by recordValueWithExpectedInterval (HDR back-fills the samples a stalled
+        // target swallows) — NOT by starting the clock before the pace wait, which would inflate
+        // every latency by the pacing interval even when the target is fast.
         double currentRate = rateLimiter.getRate();
         final long expectedIntervalNanos = currentRate > 0 ? (long) (1_000_000_000L / currentRate) : 0L;
 
@@ -368,12 +370,14 @@ public class ExecutionController implements java.io.Closeable {
         final boolean recordLatency = warmupComplete.get();
 
         resourceManager.getExecutor().submit(() -> {
+            // Clock starts at actual send time (after the pace wait): this is service latency.
+            long serviceStartNanos = System.nanoTime();
             long requestStartTime = System.currentTimeMillis();
             long elapsedTime = requestStartTime - testStartTime;
             requestExecutor.executeRequest(requestId, elapsedTime);
             if (recordLatency) {
                 metricsCollector.recordEndToEndLatency(
-                        System.nanoTime() - intendedStartNanos, expectedIntervalNanos);
+                        System.nanoTime() - serviceStartNanos, expectedIntervalNanos);
             }
         });
     }
@@ -388,10 +392,11 @@ public class ExecutionController implements java.io.Closeable {
         completionLatch.countDown();
         metricsCollector.stop();
 
-        // Push the final result + mark the run finished on the dashboard, if enabled.
+        // Push the final result BEFORE marking the run finished, so the dashboard records the
+        // result against a still-open run (stop() posts the "finish" event).
         if (dashboardClient != null) {
-            dashboardClient.stop();
             dashboardClient.sendTestResult(metricsCollector.getTestMetrics());
+            dashboardClient.stop();
         }
 
         return new TestResult(

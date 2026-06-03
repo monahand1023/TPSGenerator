@@ -123,6 +123,25 @@ class ExecutionControllerTest {
     }
 
     @Test
+    @DisplayName("ramp-from-zero TPS does not throw (RateLimiter rejects rate 0)")
+    void rampFromZeroTpsDoesNotThrow() throws Exception {
+        TestConfig config = config(Duration.ofMillis(200), 50);
+        TestConfig.TrafficConfig t = new TestConfig.TrafficConfig();
+        t.setType("rampUp");
+        t.setStartTps(0);          // ramp from idle — initial rate 0 would crash RateLimiter.create
+        t.setTargetTps(50);
+        t.setRampDuration(Duration.ofMillis(100));
+        config.setTrafficPattern(t);
+
+        MetricsCollector metrics = new MetricsCollector(config);
+        StubHttpClient client = StubHttpClient.returning(response(200, "OK"));
+
+        try (ExecutionController controller = new ExecutionController(config, metrics, client)) {
+            assertDoesNotThrow(controller::execute);
+        }
+    }
+
+    @Test
     @DisplayName("close() after a completed run does not throw")
     void closeIsSafe() throws Exception {
         TestConfig config = config(Duration.ofMillis(150), 50);

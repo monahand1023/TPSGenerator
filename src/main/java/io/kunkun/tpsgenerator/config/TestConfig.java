@@ -66,6 +66,28 @@ public class TestConfig {
                     "Target TPS must be positive for pattern type: " + trafficPattern.getType());
         }
 
+        // Pattern-specific duration fields are otherwise null and would NPE (or divide by zero)
+        // in the traffic-pattern factory/implementations, which run before any traffic is sent.
+        String patternType = trafficPattern.getType().toLowerCase();
+        if ("rampup".equals(patternType)) {
+            Duration ramp = trafficPattern.getRampDuration();
+            if (ramp == null || ramp.isZero() || ramp.isNegative()) {
+                throw new IllegalArgumentException(
+                        "rampDuration must be a positive duration for the rampUp pattern");
+            }
+        }
+        if ("spike".equals(patternType)) {
+            if (trafficPattern.getSpikeStartTime() == null || trafficPattern.getSpikeStartTime().isNegative()) {
+                throw new IllegalArgumentException(
+                        "spikeStartTime must be set (non-negative) for the spike pattern");
+            }
+            Duration spikeDur = trafficPattern.getSpikeDuration();
+            if (spikeDur == null || spikeDur.isZero() || spikeDur.isNegative()) {
+                throw new IllegalArgumentException(
+                        "spikeDuration must be a positive duration for the spike pattern");
+            }
+        }
+
         // threadPool is optional: the virtual-thread engine no longer bounds concurrency by a
         // worker pool, so a missing block is fine. If provided (for backward-compatible configs)
         // its values are still sanity-checked so a clearly-wrong block surfaces an error.

@@ -92,7 +92,8 @@ public class RateLimiterScheduler {
             long startTime = metricsCollector.getStartTime();
             long elapsedTimeMs = startTime > 0 ? System.currentTimeMillis() - startTime : 0L;
             double targetTps = trafficPattern.getTpsAtTime(elapsedTimeMs, totalDurationMs);
-            rateLimiter.setRate(targetTps);
+            // setRate also requires a positive rate; floor non-positive (idle / ramp-from-zero) rates.
+            rateLimiter.setRate(targetTps > 0 ? targetTps : 1.0);
 
             long now = System.currentTimeMillis();
             if (now - lastProgressLogTime >= Constants.PROGRESS_LOG_INTERVAL_MS) {
