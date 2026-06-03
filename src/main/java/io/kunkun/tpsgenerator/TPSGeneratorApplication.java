@@ -5,6 +5,7 @@ import io.kunkun.tpsgenerator.config.FlexibleDurationDeserializer;
 import io.kunkun.tpsgenerator.config.TestConfig;
 import io.kunkun.tpsgenerator.core.ExecutionController;
 import io.kunkun.tpsgenerator.metrics.LatencyStats;
+import io.kunkun.tpsgenerator.metrics.LiveStatusReporter;
 import io.kunkun.tpsgenerator.metrics.MetricsCollector;
 import io.kunkun.tpsgenerator.metrics.RunComparator;
 import io.kunkun.tpsgenerator.metrics.TestMetrics;
@@ -48,13 +49,24 @@ public class TPSGeneratorApplication {
             return;
         }
 
-        if (args.length > 2 && "--verbose".equals(args[2])) {
+        boolean verbose = false;
+        boolean live = false;
+        for (int i = 1; i < args.length; i++) {
+            if ("--verbose".equals(args[i])) {
+                verbose = true;
+            } else if ("--live".equals(args[i])) {
+                live = true;
+            }
+        }
+        if (verbose) {
             HttpUtils.enableVerboseLogging();
             log.info("Verbose logging enabled");
         }
 
         String configFile = args[0];
-        String outputDir = args.length > 1 ? args[1] : "results";
+        // First non-flag arg after the config file is the output directory.
+        String outputDir = (args.length > 1 && !args[1].startsWith("--")) ? args[1] : "results";
+        final boolean liveStatus = live;
 
         try {
             // Ensure output directory exists
@@ -90,10 +102,21 @@ public class TPSGeneratorApplication {
             // Initialize execution controller (passes shared client)
             ExecutionController controller = new ExecutionController(config, metricsCollector, sharedHttpClient);
 
-            // Run the test
+            // Run the test (optionally with a live in-place status line)
             log.info("Starting test execution...");
+            LiveStatusReporter liveReporter = liveStatus
+                    ? new LiveStatusReporter(metricsCollector, config.getTestDuration().toMillis()) : null;
             Instant startTime = Instant.now();
-            controller.execute();
+            if (liveReporter != null) {
+                liveReporter.start();
+            }
+            try {
+                controller.execute();
+            } finally {
+                if (liveReporter != null) {
+                    liveReporter.stop();
+                }
+            }
             Instant endTime = Instant.now();
             Duration testDuration = Duration.between(startTime, endTime);
             log.info("Test completed in {}", formatDuration(testDuration));

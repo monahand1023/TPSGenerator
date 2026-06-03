@@ -243,6 +243,13 @@ For verbose logging, add the `--verbose` flag:
 java -jar target/tps-generator-1.0.0.jar path/to/test-config.json results --verbose
 ```
 
+For a live, in-place status line during the run (TPS, success rate, p50/p95/p99, request count,
+progress), add `--live`:
+
+```bash
+java -jar target/tps-generator-1.0.0.jar path/to/test-config.json results --live
+```
+
 ### Traffic Patterns
 
 The tool supports several traffic patterns:
