@@ -57,4 +57,12 @@ class RunComparatorTest {
         RunComparator.Result r = RunComparator.compare(doc(0.99, 50, 20), doc(0.99, 50, 21), 10.0, 0.01);
         assertFalse(r.hasRegressions(), r.getRegressions().toString());
     }
+
+    @Test
+    @DisplayName("Zero baseline latency with a non-zero candidate is an (infinite) regression")
+    void zeroBaselineNonZeroCandidateFlagged() {
+        RunComparator.Result r = RunComparator.compare(doc(0.99, 50, 0), doc(0.99, 50, 10), 10.0, 0.01);
+        assertTrue(r.hasRegressions());
+        assertTrue(r.getRegressions().stream().anyMatch(s -> s.contains("p95Ms")), r.getRegressions().toString());
+    }
 }

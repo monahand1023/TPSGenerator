@@ -21,4 +21,12 @@ class HistogramCodecTest {
         assertEquals(h.getValueAtPercentile(99), decoded.getValueAtPercentile(99));
         assertEquals(h.getMaxValue(), decoded.getMaxValue());
     }
+
+    @Test
+    void decodeRejectsInvalidInput() {
+        // Valid base64 but not a histogram → IllegalArgumentException (not a leaked DataFormatException).
+        assertThrows(IllegalArgumentException.class, () -> HistogramCodec.decode("aGVsbG8="));
+        // Not even valid base64.
+        assertThrows(IllegalArgumentException.class, () -> HistogramCodec.decode("!!!not-base64!!!"));
+    }
 }

@@ -40,21 +40,28 @@ import java.util.List;
 public class TPSGeneratorApplication {
 
     public static void main(String[] args) {
+        System.exit(run(args));
+    }
+
+    /**
+     * Runs the CLI and returns the process exit code, instead of calling {@code System.exit}, so
+     * the exit-code contract is unit-testable. Codes: 0 ok, 1 usage/error, 2 error-rate threshold
+     * exceeded, 3 SLA breach, 4 compare regression.
+     */
+    static int run(String[] args) {
         if (args.length < 1) {
             printUsage();
-            System.exit(1);
+            return 1;
         }
 
         // Subcommand: compare two prior JSON result files for regression gating.
         if ("compare".equalsIgnoreCase(args[0])) {
-            runComparison(args);
-            return;
+            return runComparison(args);
         }
 
         // Subcommand: merge JSON result files from independent (distributed) runs.
         if ("merge".equalsIgnoreCase(args[0])) {
-            runMerge(args);
-            return;
+            return runMerge(args);
         }
 
         boolean verbose = false;
@@ -93,7 +100,7 @@ public class TPSGeneratorApplication {
             } catch (IllegalArgumentException e) {
                 System.err.println("Invalid configuration: " + e.getMessage());
                 System.err.println("Please check your test configuration file and try again.");
-                System.exit(1);
+                return 1;
             }
 
             // Create a single shared HTTP client for all components
@@ -162,7 +169,7 @@ public class TPSGeneratorApplication {
                 log.error("Test failed: error rate {}% exceeded threshold {}%",
                         String.format("%.2f", errorRate * 100),
                         String.format("%.2f", threshold * 100));
-                System.exit(2);
+                return 2;
             }
 
             // SLA check: exit 3 if any configured latency/throughput/success-rate budget is breached.
@@ -174,12 +181,14 @@ public class TPSGeneratorApplication {
                     log.error("SLA breach: {}", breach);
                     System.out.println(" - " + breach);
                 }
-                System.exit(3);
+                return 3;
             }
+
+            return 0;
 
         } catch (Exception e) {
             log.error("Error executing test", e);
-            System.exit(1);
+            return 1;
         }
     }
 
@@ -216,12 +225,11 @@ public class TPSGeneratorApplication {
      * Handles the {@code compare} subcommand: diffs two JSON result files and exits 4 on regression.
      * Usage: {@code compare <baseline.json> <candidate.json> [maxLatencyRegressionPct] [maxSuccessRateDrop]}
      */
-    private static void runComparison(String[] args) {
+    static int runComparison(String[] args) {
         if (args.length < 3) {
             System.out.println("Usage: java -jar tps-generator.jar compare <baseline.json> <candidate.json> "
                     + "[maxLatencyRegressionPct=10] [maxSuccessRateDrop=0.01]");
-            System.exit(1);
-            return;
+            return 1;
         }
         try {
             ObjectMapper mapper = new ObjectMapper();
@@ -239,12 +247,13 @@ public class TPSGeneratorApplication {
             if (result.hasRegressions()) {
                 System.out.println("\n=== REGRESSIONS ===");
                 result.getRegressions().forEach(r -> System.out.println(" - " + r));
-                System.exit(4);
+                return 4;
             }
             System.out.println("\nNo regressions beyond thresholds.");
+            return 0;
         } catch (Exception e) {
             log.error("Comparison failed", e);
-            System.exit(1);
+            return 1;
         }
     }
 
@@ -253,12 +262,11 @@ public class TPSGeneratorApplication {
      * runs into one document with summed counts and merged-histogram percentiles.
      * Usage: {@code merge <output.json> <run1.json> <run2.json> [...]}
      */
-    private static void runMerge(String[] args) {
+    static int runMerge(String[] args) {
         if (args.length < 3) {
             System.out.println("Usage: java -jar tps-generator.jar merge <output.json> "
                     + "<run1.json> <run2.json> [...]");
-            System.exit(1);
-            return;
+            return 1;
         }
         try {
             ObjectMapper mapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
@@ -279,9 +287,10 @@ public class TPSGeneratorApplication {
             @SuppressWarnings("unchecked")
             java.util.Map<String, Object> lat = (java.util.Map<String, Object>) merged.get("latency");
             System.out.println("p50/p95/p99 ms: " + lat.get("p50Ms") + "/" + lat.get("p95Ms") + "/" + lat.get("p99Ms"));
+            return 0;
         } catch (Exception e) {
             log.error("Merge failed", e);
-            System.exit(1);
+            return 1;
         }
     }
 
