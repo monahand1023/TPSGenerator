@@ -20,7 +20,7 @@
         <!-- Dependency versions -->
         <spring.boot.version>2.7.14</spring.boot.version>
         <guava.version>33.6.0-jre</guava.version>
-        <jackson.version>2.14.2</jackson.version>
+        <jackson.version>2.22.0</jackson.version>
         <hdrhistogram.version>2.2.2</hdrhistogram.version>
         <commons.csv.version>1.14.1</commons.csv.version>
         <lombok.version>1.18.46</lombok.version>
