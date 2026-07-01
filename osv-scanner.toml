@@ -1,0 +1,3 @@
+[[IgnoredVulns]]
+id = "GHSA-5jmj-h7xm-6q6v"
+reason = "No patched jackson-databind release exists yet (2.22.0-2.22.1 unfixed too). Exploit needs @JsonFormat(ACCEPT_CASE_INSENSITIVE_PROPERTIES) + per-property @JsonIgnoreProperties; this repo only uses class-level ignoreUnknown=true. See Dependabot alert #6."
