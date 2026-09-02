@@ -270,7 +270,7 @@ Here's a sample configuration:
 Run a test using the following command:
 
 ```bash
-java -jar target/tps-generator-1.0.0.jar path/to/test-config.json [output-directory]
+java -jar target/tps-generator-1.0.1.jar path/to/test-config.json [output-directory]
 ```
 
 Where:
@@ -280,14 +280,14 @@ Where:
 For verbose logging, add the `--verbose` flag:
 
 ```bash
-java -jar target/tps-generator-1.0.0.jar path/to/test-config.json results --verbose
+java -jar target/tps-generator-1.0.1.jar path/to/test-config.json results --verbose
 ```
 
 For a live, in-place status line during the run (TPS, success rate, p50/p95/p99, request count,
 progress), add `--live`:
 
 ```bash
-java -jar target/tps-generator-1.0.0.jar path/to/test-config.json results --live
+java -jar target/tps-generator-1.0.1.jar path/to/test-config.json results --live
 ```
 
 ### Traffic Patterns

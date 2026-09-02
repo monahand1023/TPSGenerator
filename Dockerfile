@@ -15,8 +15,8 @@ FROM eclipse-temurin:21-jre-jammy
 WORKDIR /work
 RUN useradd -r -u 1001 appuser && chown appuser /work
 
-# The shade plugin leaves both the shaded jar and original-*.jar, so name it explicitly.
-COPY --from=build /app/target/tps-generator-1.0.0.jar /app/app.jar
+# The shade plugin leaves both the shaded jar and original-*.jar; the glob matches only the shaded one.
+COPY --from=build /app/target/tps-generator-*.jar /app/app.jar
 
 USER appuser
 
