@@ -23,8 +23,6 @@ In-flight virtual threads settle at roughly `TPS × latency` (Little's Law) — 
 
 ## Table of Contents
 
-
-
 - [Project Overview](#project-overview)
 - [Features](#features)
 - [Architecture](#architecture)
@@ -38,13 +36,19 @@ In-flight virtual threads settle at roughly `TPS × latency` (Little's Law) — 
     - [Traffic Patterns](#traffic-patterns)
     - [Request Templates](#request-templates)
     - [Parameter Sources](#parameter-sources)
+- [Scenarios (Chained / Correlated Requests)](#scenarios-chained--correlated-requests)
+- [WebSocket Load Testing](#websocket-load-testing)
 - [Metrics and Reports](#metrics-and-reports)
 - [Advanced Features](#advanced-features)
     - [Circuit Breaker](#circuit-breaker)
     - [Dashboard Integration](#dashboard-integration)
     - [Resource Monitoring](#resource-monitoring)
+- [Sample Console Output](#sample-console-output)
+- [Configuration Validation](#configuration-validation)
+- [Dashboard Integration Backend API](#dashboard-integration-backend-api)
 - [Testing](#testing)
 - [Performance Optimizations](#performance-optimizations)
+- [Distributed Load Generation](#distributed-load-generation)
 - [Benchmark / Sample Run](#benchmark--sample-run)
 - [License](#license)
 
@@ -130,11 +134,9 @@ The tool supports various traffic pattern implementations:
 
 Clone the repository and build the project using Maven:
 
-
-
 ```bash
-git clone https://github.com/monahand1023/tps-generator.git
-cd tps-generator
+git clone https://github.com/monahand1023/TPSGenerator.git
+cd TPSGenerator
 mvn clean package
 ```
 
@@ -580,7 +582,7 @@ Enable resource monitoring to track CPU, memory, and thread usage:
 Below is the output for the above sample configuration file.
 
 ```
-025-04-22 11:49:48 [main] INFO  i.k.t.TPSGeneratorApplication - Verbose logging enabled
+2025-04-22 11:49:48 [main] INFO  i.k.t.TPSGeneratorApplication - Verbose logging enabled
 2025-04-22 11:49:48 [main] INFO  i.k.t.TPSGeneratorApplication - Loaded test configuration: Mock API Load Test
 2025-04-22 11:49:48 [main] INFO  i.k.t.metrics.ResourceMonitor - Initialized resource monitor
 2025-04-22 11:49:48 [main] INFO  i.k.t.metrics.MetricsCollector - Initialized metrics collector
@@ -610,7 +612,7 @@ Below is the output for the above sample configuration file.
 2025-04-22 11:51:48 [main] INFO  i.k.t.core.ExecutionController - Test execution completed, waiting for pending requests to finish
 2025-04-22 11:51:52 [main] INFO  i.k.t.metrics.MetricsCollector - Stopped metrics collection, test duration: 123938 ms
 2025-04-22 11:51:52 [main] INFO  i.k.t.TPSGeneratorApplication - Test completed in 00:02:03
-2025-04-22 11:51:52 [main] INFO  i.k.t.metrics.exporter.CSVExporter - Exporting metrics to /Users/danm/IdeaProjects/TPSGenerator/results/Mock API Load Test_20250422_114948.csv
+2025-04-22 11:51:52 [main] INFO  i.k.t.metrics.exporter.CSVExporter - Exporting metrics to results/Mock API Load Test_20250422_114948.csv
 2025-04-22 11:51:52 [main] INFO  i.k.t.metrics.exporter.CSVExporter - Metrics exported successfully
 2025-04-22 11:51:52 [main] INFO  i.k.t.TPSGeneratorApplication - Results exported to results/Mock API Load Test_20250422_114948.csv
 
