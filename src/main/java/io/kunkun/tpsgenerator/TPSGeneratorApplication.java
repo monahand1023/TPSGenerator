@@ -1,5 +1,9 @@
 package io.kunkun.tpsgenerator;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.kunkun.tpsgenerator.config.Constants;
 import io.kunkun.tpsgenerator.config.FlexibleDurationDeserializer;
 import io.kunkun.tpsgenerator.config.TestConfig;
@@ -10,12 +14,8 @@ import io.kunkun.tpsgenerator.metrics.LiveStatusReporter;
 import io.kunkun.tpsgenerator.metrics.MetricsCollector;
 import io.kunkun.tpsgenerator.metrics.RunComparator;
 import io.kunkun.tpsgenerator.metrics.TestMetrics;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import io.kunkun.tpsgenerator.metrics.exporter.CSVExporter;
 import io.kunkun.tpsgenerator.metrics.exporter.JsonExporter;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.module.SimpleModule;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.kunkun.tpsgenerator.utils.HttpUtils;
 import lombok.extern.slf4j.Slf4j;
 
@@ -31,6 +31,8 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.Executors;
 
 /**
  * Main application class for the TPS Generator.
@@ -108,7 +110,7 @@ public class TPSGeneratorApplication {
                     .connectTimeout(Duration.ofSeconds(Constants.DEFAULT_CONNECT_TIMEOUT_SECONDS))
                     .version(HttpClient.Version.HTTP_2)
                     // Virtual-thread executor for response callbacks scales to high concurrency.
-                    .executor(java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor())
+                    .executor(Executors.newVirtualThreadPerTaskExecutor())
                     .build();
 
             // Initialize metrics collector
@@ -234,9 +236,9 @@ public class TPSGeneratorApplication {
         try {
             ObjectMapper mapper = new ObjectMapper();
             @SuppressWarnings("unchecked")
-            java.util.Map<String, Object> baseline = mapper.readValue(new File(args[1]), java.util.Map.class);
+            Map<String, Object> baseline = mapper.readValue(new File(args[1]), Map.class);
             @SuppressWarnings("unchecked")
-            java.util.Map<String, Object> candidate = mapper.readValue(new File(args[2]), java.util.Map.class);
+            Map<String, Object> candidate = mapper.readValue(new File(args[2]), Map.class);
             double maxLatPct = args.length > 3 ? Double.parseDouble(args[3]) : 10.0;
             double maxSrDrop = args.length > 4 ? Double.parseDouble(args[4]) : 0.01;
 
@@ -270,14 +272,14 @@ public class TPSGeneratorApplication {
         }
         try {
             ObjectMapper mapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
-            List<java.util.Map<String, Object>> runs = new ArrayList<>();
+            List<Map<String, Object>> runs = new ArrayList<>();
             for (int i = 2; i < args.length; i++) {
                 @SuppressWarnings("unchecked")
-                java.util.Map<String, Object> run = mapper.readValue(new File(args[i]), java.util.Map.class);
+                Map<String, Object> run = mapper.readValue(new File(args[i]), Map.class);
                 runs.add(run);
             }
 
-            java.util.Map<String, Object> merged = DistributedMerger.merge(runs);
+            Map<String, Object> merged = DistributedMerger.merge(runs);
             mapper.writeValue(new File(args[1]), merged);
 
             System.out.println("\n=== Merged " + runs.size() + " runs -> " + args[1] + " ===");
@@ -285,7 +287,7 @@ public class TPSGeneratorApplication {
             System.out.println("Success Rate:   " + merged.get("successRate"));
             System.out.println("Combined TPS:   " + merged.get("averageTps"));
             @SuppressWarnings("unchecked")
-            java.util.Map<String, Object> lat = (java.util.Map<String, Object>) merged.get("latency");
+            Map<String, Object> lat = (Map<String, Object>) merged.get("latency");
             System.out.println("p50/p95/p99 ms: " + lat.get("p50Ms") + "/" + lat.get("p95Ms") + "/" + lat.get("p99Ms"));
             return 0;
         } catch (Exception e) {

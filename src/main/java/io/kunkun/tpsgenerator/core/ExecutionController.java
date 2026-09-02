@@ -21,7 +21,6 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.*;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -33,9 +32,6 @@ import java.util.concurrent.atomic.AtomicLong;
  * {@link LatencyRecorderAdapter} (HDR histogram wrapper), and
  * {@link RequestExecutor} (per-request HTTP logic).
  *
- * <p>The public API — constructor signatures, {@link #execute()},
- * {@link #getLatencyPercentiles()}, {@link #stop()}, and {@link #close()} —
- * is unchanged from the original implementation.
  */
 @Slf4j
 public class ExecutionController implements java.io.Closeable {
@@ -46,6 +42,12 @@ public class ExecutionController implements java.io.Closeable {
     private final RequestGenerator requestGenerator;
     private final CircuitBreaker circuitBreaker;
     private final RateLimiter rateLimiter;
+
+    /**
+     * Kept so {@link #execute()} can build the {@link RateLimiterScheduler} after the metrics
+     * collector has started, giving the scheduler an accurate start time.
+     */
+    private final TrafficPattern trafficPattern;
 
     private final ExecutionResourceManager resourceManager;
 
@@ -120,11 +122,7 @@ public class ExecutionController implements java.io.Closeable {
             this.circuitBreaker = null;
         }
 
-        // RateLimiterScheduler is created just before execute() so it can
-        // capture metricsCollector.getStartTime() accurately — but we keep a
-        // reference to trafficPattern and totalDurationMs for that.
-        // We store them in locals here and build the scheduler in execute().
-        this._trafficPattern = trafficPattern;
+        this.trafficPattern = trafficPattern;
 
         log.info("Initialized execution controller with traffic pattern: {}", trafficPattern);
 
@@ -132,9 +130,6 @@ public class ExecutionController implements java.io.Closeable {
         // so the hook is not orphaned if the constructor throws.
         resourceManager.addShutdownHook();
     }
-
-    // Stored only so execute() can build RateLimiterScheduler after metrics start.
-    private final TrafficPattern _trafficPattern;
 
     // -------------------------------------------------------------------------
     // Main public API
@@ -166,7 +161,7 @@ public class ExecutionController implements java.io.Closeable {
             metricsCollector.start();
 
             RateLimiterScheduler rateLimiterScheduler = new RateLimiterScheduler(
-                    _trafficPattern, rateLimiter, resourceManager, metricsCollector,
+                    trafficPattern, rateLimiter, resourceManager, metricsCollector,
                     config.getTestDuration().toMillis());
             rateLimiterScheduler.start();
 
