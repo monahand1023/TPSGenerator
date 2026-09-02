@@ -9,7 +9,7 @@ My solution here is a robust, flexible, and feature-rich load testing tool for g
 
 ```mermaid
 flowchart LR
-    Cfg["Test config (JSON)"] --> Pat["Traffic pattern<br/>stable · ramp · spike · Markov · custom"]
+    Cfg["Test config (JSON)"] --> Pat["Traffic pattern<br/>stable · ramp-up · spike · custom (CSV)"]
     Pat --> RL["Guava RateLimiter<br/>paces submission to target TPS"]
     RL --> Exec["Virtual-thread-per-task executor<br/>one virtual thread per in-flight request"]
     Exec --> HC["JDK HttpClient · HTTP/2"]
@@ -553,12 +553,16 @@ service. **TPSGenerator-Server implements this backend** and serves a live UI at
 enabling the block below points the run at it out of the box:
 
 ```json
-"dashboard": {
-  "enabled": true,
-  "url": "http://localhost:8080",
-  "apiKey": "your-api-key"
+"metrics": {
+  "dashboard": {
+    "enabled": true,
+    "url": "http://localhost:8080",
+    "apiKey": "your-api-key"
+  }
 }
 ```
+
+The block lives under `metrics` (see `test-config.json`); a top-level `dashboard` key is ignored.
 
 `url` is the dashboard server base URL; `apiKey` is optional and sent as `X-API-Key` only when set
 (it must match the server's `DASHBOARD_API_KEY` if the server has one configured). Open
